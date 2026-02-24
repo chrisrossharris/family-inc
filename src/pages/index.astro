@@ -1,0 +1,128 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import BarSpark from '@/components/BarSpark.astro';
+import { getCategoryDistribution, getImportAuditMeta, getKpisByEntity, getMonthlyStacked, getSystemCounts, getTopVendors } from '@/lib/services/reports';
+import { formatCurrency, formatMonthLabel } from '@/lib/utils/format';
+import { databaseUrl } from '@/lib/db/connection';
+
+const kpis = await getKpisByEntity();
+const monthly = await getMonthlyStacked();
+const categoryDist = await getCategoryDistribution();
+const vendors = await getTopVendors(undefined, 10);
+const meta = await getImportAuditMeta();
+const counts = await getSystemCounts();
+const monthlyTotals = monthly.map((m) => m.chris + m.kate + m.big_picture);
+const params = Astro.url.searchParams;
+const imported = params.get('imported') === '1';
+const alreadyImported = params.get('alreadyImported') === '1';
+---
+
+<BaseLayout title="Operating Report" subtitle="A living annual report for Chris, Kate, and Big Picture.">
+  {imported && (
+    <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">
+      {alreadyImported
+        ? `This file was already imported on ${params.get('existingImportedAt') ?? 'an earlier run'} (rows: ${params.get('existingRows') ?? 'n/a'}).`
+        : `Import completed. Inserted: ${params.get('inserted') ?? '0'} | Skipped: ${params.get('skipped') ?? '0'} | Duplicates flagged: ${params.get('duplicates') ?? '0'}`}
+    </div>
+  )}
+
+  <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+    {kpis.map((kpi) => (
+      <article class="panel">
+        <p class="panel-title">{kpi.label}</p>
+        <p class="mono-num mt-3 text-2xl text-ink">{formatCurrency(kpi.totalSpend)}</p>
+        <dl class="mt-4 space-y-1 text-xs">
+          <div class="flex justify-between"><dt>Avg Monthly Burn</dt><dd class="mono-num">{formatCurrency(kpi.avgMonthlyBurn)}</dd></div>
+          <div class="flex justify-between"><dt>Top Category</dt><dd class="max-w-[60%] truncate text-right">{kpi.topCategory}</dd></div>
+          <div class="flex justify-between"><dt>Top Vendor</dt><dd class="max-w-[60%] truncate text-right">{kpi.topVendor}</dd></div>
+          <div class="flex justify-between"><dt>Needs Review</dt><dd class="mono-num">{kpi.needsReviewCount}</dd></div>
+        </dl>
+      </article>
+    ))}
+  </section>
+
+  <section class="mt-4 grid gap-4 lg:grid-cols-3">
+    <article class="panel lg:col-span-2">
+      <h2 class="panel-title">Monthly Burn Rate (All Entities)</h2>
+      <div class="mt-3"><BarSpark values={monthlyTotals} /></div>
+      <div class="mt-2 grid grid-cols-4 gap-2 text-[11px] text-muted md:grid-cols-8">
+        {monthly.map((row) => <span>{formatMonthLabel(row.month)}</span>)}
+      </div>
+      <table class="table-report mt-4 w-full">
+        <thead>
+          <tr><th>Month</th><th class="text-right">Chris</th><th class="text-right">Kate</th><th class="text-right">Big Picture</th></tr>
+        </thead>
+        <tbody>
+          {monthly.map((row) => (
+            <tr>
+              <td>{formatMonthLabel(row.month)}</td>
+              <td class="mono-num">{formatCurrency(row.chris)}</td>
+              <td class="mono-num">{formatCurrency(row.kate)}</td>
+              <td class="mono-num">{formatCurrency(row.big_picture)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </article>
+
+    <article class="panel">
+      <h2 class="panel-title">Import Data Source</h2>
+      <form method="post" action="/api/import" enctype="multipart/form-data" class="mt-3 space-y-2">
+        <input type="file" name="file" accept=".csv" required class="w-full text-sm" />
+        <button type="submit" class="w-full border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Import Transaction CSV</button>
+      </form>
+      <dl class="mt-4 space-y-1 text-xs">
+        <div class="flex justify-between"><dt>Data source</dt><dd>{meta.latestImport?.filename ?? 'No import yet'}</dd></div>
+        <div class="flex justify-between"><dt>Imported at</dt><dd>{meta.latestImport?.imported_at ?? 'n/a'}</dd></div>
+        <div class="flex justify-between"><dt>Rows</dt><dd class="mono-num">{meta.latestImport?.row_count ?? 0}</dd></div>
+        <div class="flex justify-between"><dt>Imports table rows</dt><dd class="mono-num">{counts.imports}</dd></div>
+        <div class="flex justify-between"><dt>Transaction rows</dt><dd class="mono-num">{counts.transactions}</dd></div>
+        <div class="flex justify-between"><dt>Refund totals</dt><dd class="mono-num">{formatCurrency(meta.refundTotals)}</dd></div>
+      </dl>
+      <p class="mt-4 text-xs text-muted">Refunds excluded from burn rate.</p>
+      <p class="text-xs text-muted">Business use: 32.7% of total home (set in Deductions).</p>
+      <p class="mt-2 break-all font-mono text-[10px] text-muted">DB: {databaseUrl}</p>
+    </article>
+  </section>
+
+  <section class="mt-4 grid gap-4 lg:grid-cols-2">
+    <article class="panel">
+      <h2 class="panel-title">Category Distribution</h2>
+      <table class="table-report mt-3 w-full">
+        <thead><tr><th>Category</th><th class="text-right">Total</th></tr></thead>
+        <tbody>
+          {categoryDist.map((row) => (
+            <tr>
+              <td>{row.category}</td>
+              <td class="mono-num">{formatCurrency(row.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </article>
+
+    <article class="panel">
+      <h2 class="panel-title">Vendor Leaderboard Top 10</h2>
+      <table class="table-report mt-3 w-full">
+        <thead><tr><th>Vendor</th><th class="text-right">Total</th></tr></thead>
+        <tbody>
+          {vendors.map((row) => (
+            <tr>
+              <td>{row.vendor}</td>
+              <td class="mono-num">{formatCurrency(row.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </article>
+  </section>
+
+  <footer class="mt-6 border-t border-grid pt-4 text-xs text-muted">
+    <p>Gross vs Net shown as spend minus refunds. Data source timestamp from latest import.</p>
+    <div class="mt-2 flex flex-wrap gap-2">
+      <a href="/api/exports/meals-summary.csv" class="border border-grid px-2 py-1">Meals (50%) Summary</a>
+      <a href="/api/exports/contract-labor-600.csv" class="border border-grid px-2 py-1">Contract Labor &gt; $600</a>
+      <a href="/api/exports/category-breakdown.csv" class="border border-grid px-2 py-1">Annual Category Breakdown</a>
+    </div>
+  </footer>
+</BaseLayout>

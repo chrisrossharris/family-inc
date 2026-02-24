@@ -1,0 +1,56 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { ENTITY_LABELS } from '@/lib/constants';
+import { calculateDeductionTotals, getDeductions } from '@/lib/services/deductions';
+import { formatCurrency } from '@/lib/utils/format';
+import type { Entity } from '@/lib/types';
+
+const entities = Object.keys(ENTITY_LABELS) as Entity[];
+const records = await getDeductions();
+const totalsByEntity = new Map<Entity, number>();
+
+for (const entity of entities) {
+  totalsByEntity.set(entity, await calculateDeductionTotals(entity));
+}
+---
+
+<BaseLayout title="Deductions" subtitle="Manual deduction worksheets with YTD estimates.">
+  <section class="grid gap-4 md:grid-cols-3">
+    {entities.map((entity) => (
+      <article class="panel">
+        <h2 class="panel-title">Estimated Total Deductions ({ENTITY_LABELS[entity]})</h2>
+        <p class="mono-num mt-3 text-2xl text-accent">{formatCurrency(totalsByEntity.get(entity) ?? 0)}</p>
+        <p class="mt-2 text-xs text-muted">Business use: 32.7% of total home (override in payload).</p>
+        <a href={`/entity/${entity}`} class="mt-3 inline-block border border-grid px-2 py-1 text-xs uppercase tracking-report">Open entity ledger</a>
+      </article>
+    ))}
+  </section>
+
+  <section class="panel mt-4">
+    <h2 class="panel-title">Upsert Deduction Payload</h2>
+    <p class="mt-2 text-xs text-muted">Submit JSON payloads for `home_office`, `mileage`, `phone`, or `equipment`.</p>
+    <form method="post" action="/api/deductions" class="mt-3 grid gap-3 md:grid-cols-3">
+      <select name="entity"><option value="chris">Chris</option><option value="kate">Kate</option><option value="big_picture">Big Picture</option></select>
+      <select name="type"><option value="home_office">home_office</option><option value="mileage">mileage</option><option value="phone">phone</option><option value="equipment">equipment</option></select>
+      <textarea name="payload_json" required class="md:col-span-3" rows="7" placeholder='{"totalSqft":2400,"businessSqft":785,"mortgageInterest":18000,"utilities":5400,"insurance":2200,"repairs":1200}'></textarea>
+      <button type="submit" class="md:col-span-3 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Deduction Input</button>
+    </form>
+  </section>
+
+  <section class="panel mt-4 overflow-x-auto">
+    <h2 class="panel-title">Saved Deduction Records</h2>
+    <table class="table-report mt-3 w-full min-w-[920px]">
+      <thead><tr><th>Entity</th><th>Type</th><th>Payload JSON</th><th>Updated</th></tr></thead>
+      <tbody>
+        {records.map((row) => (
+          <tr>
+            <td>{row.entity}</td>
+            <td>{row.type}</td>
+            <td class="font-mono text-xs">{JSON.stringify(row.payload)}</td>
+            <td>{row.updated_at}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </section>
+</BaseLayout>

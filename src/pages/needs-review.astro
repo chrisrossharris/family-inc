@@ -1,0 +1,103 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { getNeedsReviewTransactions } from '@/lib/services/reports';
+import { formatCurrency } from '@/lib/utils/format';
+import { SCHEDULE_C_CATEGORIES } from '@/lib/constants';
+
+const rows = await getNeedsReviewTransactions();
+const updatedRows = Astro.url.searchParams.get('updated');
+---
+
+<BaseLayout title="Needs Review" subtitle="Audit mode for uncategorized / low-confidence transactions.">
+  {updatedRows && (
+    <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">
+      Updated {updatedRows} transaction{updatedRows === '1' ? '' : 's'}.
+    </div>
+  )}
+
+  <section class="panel">
+    <h2 class="panel-title">Quick Assign</h2>
+    <p class="mt-2 text-xs text-muted">Tip: use inline row editing below for one-click updates. Use this form for multi-ID batch updates.</p>
+    <form method="post" action="/api/transactions-bulk-update" class="mt-3 grid gap-3 md:grid-cols-4">
+      <textarea name="ids" required placeholder="Comma-separated transaction IDs" class="md:col-span-2"></textarea>
+      <select name="entity">
+        <option value="">Entity</option>
+        <option value="chris">Chris</option>
+        <option value="kate">Kate</option>
+        <option value="big_picture">Big Picture</option>
+      </select>
+      <select name="category">
+        <option value="">Category</option>
+        {SCHEDULE_C_CATEGORIES.map((cat) => <option value={cat}>{cat}</option>)}
+      </select>
+      <button type="submit" class="md:col-span-4 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Apply Bulk Update</button>
+    </form>
+  </section>
+
+  <section class="panel mt-4">
+    <h2 class="panel-title">Create Vendor Rule Inline</h2>
+    <form method="post" action="/api/rules" class="mt-3 grid gap-3 md:grid-cols-3">
+      <select name="match_type"><option value="contains">contains</option><option value="exact">exact</option><option value="regex">regex</option></select>
+      <input type="text" name="match_value" required placeholder="vendor pattern" />
+      <select name="entity"><option value="chris">Chris</option><option value="kate">Kate</option><option value="big_picture" selected>Big Picture</option></select>
+      <select name="category" class="md:col-span-2">{SCHEDULE_C_CATEGORIES.map((cat) => <option value={cat}>{cat}</option>)}</select>
+      <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="deductible_flag" value="1" checked /> Deductible</label>
+      <input type="hidden" name="apply_retroactively" value="1" />
+      <button type="submit" class="md:col-span-3 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Rule + Apply Retroactively</button>
+    </form>
+  </section>
+
+  <section class="panel mt-4 overflow-x-auto">
+    <div class="flex items-end justify-between gap-3">
+      <h2 class="panel-title">Transactions Missing Strong Match</h2>
+      <p class="font-mono text-xs text-muted">Rows: {rows.length}</p>
+    </div>
+    <table class="table-report needs-review-table mt-3 w-full min-w-[1320px]">
+      <colgroup>
+        <col class="w-[70px]" />
+        <col class="w-[120px]" />
+        <col class="w-[150px]" />
+        <col class="w-[300px]" />
+        <col class="w-[120px]" />
+        <col class="w-[130px]" />
+        <col class="w-[260px]" />
+        <col class="w-[120px]" />
+        <col class="w-[140px]" />
+      </colgroup>
+      <thead>
+        <tr><th>ID</th><th>Date</th><th>Vendor</th><th>Description</th><th class="text-right">Amount</th><th>Entity</th><th>Category</th><th>Confidence</th><th>Rule Status</th></tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr class={row.confidence === 'low' ? 'bg-red-50/40' : undefined}>
+            <td class="mono-num">{row.id}</td>
+            <td class="font-mono text-xs">{row.date}</td>
+            <td class="font-medium">{row.vendor}</td>
+            <td class="text-xs leading-relaxed">{row.description || '—'}</td>
+            <td class="mono-num">{formatCurrency(row.amount)}</td>
+            <td><span class="inline-block border border-grid px-2 py-1 text-xs uppercase tracking-report">{row.entity.replace('_', ' ')}</span></td>
+            <td>
+              <form method="post" action="/api/transactions-bulk-update">
+                <input type="hidden" name="ids" value={String(row.id)} />
+                <select
+                  name="category"
+                  class="text-xs"
+                  onchange="this.form.submit()"
+                  aria-label={`Set category for transaction ${row.id}`}
+                >
+                  {SCHEDULE_C_CATEGORIES.map((cat) => <option value={cat} selected={row.category === cat}>{cat}</option>)}
+                </select>
+              </form>
+            </td>
+            <td>
+              <span class:list={['inline-block border px-2 py-1 text-xs uppercase tracking-report', row.confidence === 'low' ? 'border-red-300 bg-red-50 text-red-900' : 'border-grid']}>
+                {row.confidence}
+              </span>
+            </td>
+            <td class="text-xs">{row.rule_id ? `rule #${row.rule_id}` : 'no match'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </section>
+</BaseLayout>

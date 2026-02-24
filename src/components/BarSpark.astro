@@ -1,0 +1,21 @@
+---
+interface Props {
+  values: number[];
+}
+
+const { values } = Astro.props;
+const max = Math.max(...values, 1);
+const width = 320;
+const height = 80;
+const gap = 4;
+const barWidth = Math.max(6, (width - gap * (values.length - 1)) / Math.max(values.length, 1));
+---
+
+<svg viewBox={`0 0 ${width} ${height}`} class="w-full" role="img" aria-label="Monthly burn bars">
+  {values.map((value, idx) => {
+    const barHeight = (value / max) * (height - 8);
+    const x = idx * (barWidth + gap);
+    const y = height - barHeight;
+    return <rect x={x} y={y} width={barWidth} height={barHeight} fill="#0d4b7c" opacity="0.9"></rect>;
+  })}
+</svg>

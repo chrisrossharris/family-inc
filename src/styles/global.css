@@ -1,0 +1,53 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: theme(colors.ink);
+  background: theme(colors.paper);
+}
+
+body {
+  @apply bg-paper text-ink font-sans antialiased;
+}
+
+.report-grid {
+  background-image:
+    linear-gradient(to right, rgba(31, 31, 29, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(31, 31, 29, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.panel {
+  @apply border border-grid bg-white/60 p-4;
+}
+
+.panel-title {
+  @apply text-xs uppercase tracking-report text-muted;
+}
+
+.mono-num {
+  @apply font-mono tabular-nums text-right;
+}
+
+.table-report th {
+  @apply border-b border-grid pb-2 text-left text-xs uppercase tracking-report text-muted;
+}
+
+.table-report td {
+  @apply border-b border-grid/60 py-2 text-sm;
+}
+
+.needs-review-table th {
+  @apply sticky top-0 bg-paper align-top;
+}
+
+.needs-review-table td {
+  @apply align-top;
+}
+
+.needs-review-table select {
+  @apply w-full border-grid bg-white text-ink;
+}

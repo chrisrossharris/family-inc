@@ -1,0 +1,11 @@
+node_modules
+.astro
+dist
+.env
+*.log
+.DS_Store
+data/*.sqlite
+data/*.sqlite-*
+
+# Local Netlify folder
+.netlify
