@@ -1,12 +1,18 @@
 import type { APIRoute } from 'astro';
 import db from '@/lib/db/connection';
+import { sqlYearExpr } from '@/lib/db/sql-dialect';
+import { normalizeReportYear } from '@/lib/utils/year';
+import { resolveSession } from '@/lib/auth/session';
 
-export const GET: APIRoute = async ({ params }) => {
+export const GET: APIRoute = async ({ params, url, locals, cookies }) => {
   const entity = params.entity;
   if (!entity || !['chris', 'kate', 'big_picture'].includes(entity)) {
     return new Response('Invalid entity', { status: 400 });
   }
 
+  const session = resolveSession(locals, cookies);
+  const year = normalizeReportYear(url.searchParams.get('year'));
+  const yearExpr = sqlYearExpr('date');
   const rows = await db.all<{
     date: string;
     vendor: string;
@@ -17,9 +23,9 @@ export const GET: APIRoute = async ({ params }) => {
   }>(
     `SELECT date, vendor, amount, category, deductible_flag, description
      FROM transactions
-     WHERE entity = ?
+     WHERE tenant_id = ? AND entity = ? AND ${yearExpr} = ?
      ORDER BY date ASC, id ASC`,
-    [entity]
+    [session.tenantId, entity, year]
   );
 
   const header = 'Date,Vendor,Amount,Category,Deductible,Notes';
@@ -33,7 +39,7 @@ export const GET: APIRoute = async ({ params }) => {
   return new Response(`${header}\n${body}`, {
     headers: {
       'content-type': 'text/csv; charset=utf-8',
-      'content-disposition': `attachment; filename="${entity}-transactions.csv"`
+      'content-disposition': `attachment; filename="${entity}-transactions-${year}.csv"`
     }
   });
 };

@@ -1,0 +1,92 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { getTenantHealthForUser } from '@/lib/services/tenant-health';
+
+const userId = Astro.locals.userId;
+const rows = await getTenantHealthForUser(userId);
+
+const totals = rows.reduce(
+  (acc, row) => {
+    acc.tenants += 1;
+    acc.transactions += row.transactions;
+    acc.members += row.members;
+    acc.pendingInvites += row.pendingInvites;
+    acc.integrityFlags +=
+      row.invalidEntityCount +
+      row.invalidCategoryCount +
+      row.invalidConfidenceCount +
+      row.blankVendorCount +
+      row.blankDateCount +
+      row.unexpectedMembershipRoleCount;
+    return acc;
+  },
+  { tenants: 0, transactions: 0, members: 0, pendingInvites: 0, integrityFlags: 0 }
+);
+---
+
+<BaseLayout title="Tenant Health" subtitle="Multi-tenant quality checks and growth telemetry.">
+  <section class="grid gap-4 md:grid-cols-5">
+    <article class="panel"><p class="panel-title">Tenants</p><p class="mono-num mt-2 text-2xl">{totals.tenants}</p></article>
+    <article class="panel"><p class="panel-title">Transactions</p><p class="mono-num mt-2 text-2xl">{totals.transactions}</p></article>
+    <article class="panel"><p class="panel-title">Members</p><p class="mono-num mt-2 text-2xl">{totals.members}</p></article>
+    <article class="panel"><p class="panel-title">Pending Invites</p><p class="mono-num mt-2 text-2xl">{totals.pendingInvites}</p></article>
+    <article class="panel"><p class="panel-title">Integrity Flags</p><p class="mono-num mt-2 text-2xl">{totals.integrityFlags}</p></article>
+  </section>
+
+  <section class="panel mt-4 overflow-x-auto">
+    <h2 class="panel-title">Tenant Health Matrix</h2>
+    <table class="table-report mt-3 w-full min-w-[1700px]">
+      <thead>
+        <tr>
+          <th>Tenant</th>
+          <th>Role</th>
+          <th class="text-right">Tx</th>
+          <th class="text-right">Imports</th>
+          <th class="text-right">Rules</th>
+          <th class="text-right">Deductions</th>
+          <th class="text-right">Members</th>
+          <th class="text-right">Invites</th>
+          <th class="text-right">Health</th>
+          <th class="text-right">Children</th>
+          <th>Latest Import</th>
+          <th>Latest Tx Date</th>
+          <th class="text-right">Stale (days)</th>
+          <th class="text-right">Invalid Entity</th>
+          <th class="text-right">Invalid Category</th>
+          <th class="text-right">Invalid Confidence</th>
+          <th class="text-right">Blank Vendor</th>
+          <th class="text-right">Blank Date</th>
+          <th class="text-right">Bad Member Role</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr>
+            <td>
+              <p class="font-medium">{row.tenantName}</p>
+              <p class="font-mono text-[11px] text-muted">{row.tenantId}</p>
+            </td>
+            <td class="uppercase tracking-report text-xs">{row.role}</td>
+            <td class="mono-num">{row.transactions}</td>
+            <td class="mono-num">{row.imports}</td>
+            <td class="mono-num">{row.vendorRules}</td>
+            <td class="mono-num">{row.deductions}</td>
+            <td class="mono-num">{row.members}</td>
+            <td class="mono-num">{row.pendingInvites}</td>
+            <td class="mono-num">{row.healthRecords}</td>
+            <td class="mono-num">{row.childrenRecords}</td>
+            <td class="font-mono text-xs">{row.latestImportAt ?? '—'}</td>
+            <td class="font-mono text-xs">{row.latestTransactionDate ?? '—'}</td>
+            <td class="mono-num">{row.staleDays ?? '—'}</td>
+            <td class:list={["mono-num", row.invalidEntityCount > 0 && 'text-red-700']}>{row.invalidEntityCount}</td>
+            <td class:list={["mono-num", row.invalidCategoryCount > 0 && 'text-red-700']}>{row.invalidCategoryCount}</td>
+            <td class:list={["mono-num", row.invalidConfidenceCount > 0 && 'text-red-700']}>{row.invalidConfidenceCount}</td>
+            <td class:list={["mono-num", row.blankVendorCount > 0 && 'text-red-700']}>{row.blankVendorCount}</td>
+            <td class:list={["mono-num", row.blankDateCount > 0 && 'text-red-700']}>{row.blankDateCount}</td>
+            <td class:list={["mono-num", row.unexpectedMembershipRoleCount > 0 && 'text-red-700']}>{row.unexpectedMembershipRoleCount}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </section>
+</BaseLayout>

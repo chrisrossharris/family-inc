@@ -1,0 +1,110 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import ReportCard from '@/components/annual-report/ReportCard.astro';
+import MetricStack from '@/components/annual-report/MetricStack.astro';
+import LeaderboardTable from '@/components/annual-report/LeaderboardTable.astro';
+import { formatCurrency } from '@/lib/utils/format';
+import { getAnnualShowcaseData } from '@/lib/services/annual-report';
+
+const tenantId = Astro.locals.tenantId;
+const showcase = await getAnnualShowcaseData(tenantId);
+const generatedAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+---
+
+<BaseLayout title="Annual Report" subtitle="Final export distilling all recorded years across finance, health, and children.">
+  <div class="annual-report border border-grid">
+    <div class="ar-container">
+      <section class="ar-grid">
+        <ReportCard class="col-span-12 md:col-span-6" kicker="Family Inc retrospective">
+          <h2 class="ar-title">Annual Report</h2>
+          <p class="ar-display ar-display-accent">{showcase.periodLabel}</p>
+          <p class="ar-subline">Years covered: {showcase.years.length}</p>
+        </ReportCard>
+
+        <ReportCard class="col-span-12 md:col-span-6" kicker="Export metadata">
+          <div class="mt-4 grid grid-cols-2 gap-4">
+            <div>
+              <p class="ar-kicker">Generated</p>
+              <p class="ar-narrow text-3xl">{generatedAt}</p>
+            </div>
+            <div>
+              <p class="ar-kicker">Total transactions</p>
+              <p class="ar-narrow text-4xl ar-display-accent">{showcase.finance.transactions.toLocaleString()}</p>
+            </div>
+          </div>
+          <p class="mt-5 text-xs uppercase tracking-[0.15em] text-[#575a5f]">This page is for end-of-year review and export/storytelling, not day-to-day operations.</p>
+        </ReportCard>
+
+        <ReportCard class="col-span-12 md:col-span-8" kicker="Finance distillation">
+          <MetricStack
+            metrics={[
+              { value: formatCurrency(showcase.finance.totalSpend), label: 'Total spend', accent: true, narrow: true },
+              { value: formatCurrency(showcase.finance.totalRefunds), label: 'Total refunds', narrow: true },
+              { value: formatCurrency(showcase.finance.netSpend), label: 'Net spend', accent: true, narrow: true }
+            ]}
+            columns="grid-cols-1 md:grid-cols-3"
+          />
+
+          <div class="mt-4 grid grid-cols-5 gap-2">
+            {showcase.finance.yearly.map((row) => {
+              const spend = row.spend;
+              const maxSpend = Math.max(...showcase.finance.yearly.map((item) => item.spend), 1);
+              const pct = Math.round((spend / maxSpend) * 100);
+              return (
+                <div class="col-span-5">
+                  <div class="mb-1 flex justify-between text-[10px] uppercase tracking-[0.15em]"><span>{row.year}</span><span>{formatCurrency(spend)}</span></div>
+                  <div class="h-6 border border-black/35 bg-white">
+                    <div class="h-full bg-accent" style={`width:${pct}%`}></div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <p class="mt-3 text-xs uppercase tracking-[0.15em] text-[#575a5f]">Top category: {showcase.finance.topCategory}</p>
+        </ReportCard>
+
+        <ReportCard class="col-span-12 md:col-span-4" kicker="Vendor concentration">
+          <LeaderboardTable rows={showcase.finance.topVendors} labelHeader="Top vendors" valueHeader="Spend" />
+        </ReportCard>
+
+        <ReportCard class="col-span-12 md:col-span-6" kicker="Health distillation">
+          <MetricStack
+            metrics={[
+              { value: showcase.health.symptomEntries, label: 'Symptom entries' },
+              { value: showcase.health.highSeverity, label: 'High severity', accent: true },
+              { value: showcase.health.sickDays, label: 'Sick days' },
+              { value: showcase.health.activeAllergies, label: 'Active allergies', accent: true },
+              { value: showcase.health.activeMedications, label: 'Active meds' },
+              { value: showcase.health.upcomingAppointments, label: 'Upcoming appointments', accent: true }
+            ]}
+            columns="grid-cols-2 md:grid-cols-3"
+          />
+          <LeaderboardTable class="mt-4" rows={showcase.health.topSymptoms} labelHeader="Top symptoms" valueHeader="Count" />
+        </ReportCard>
+
+        <ReportCard class="col-span-12 md:col-span-6" kicker="Children distillation">
+          <MetricStack
+            metrics={[
+              { value: showcase.children.childrenCount, label: 'Children tracked', accent: true },
+              { value: showcase.children.checkins, label: 'Check-ins' },
+              { value: showcase.children.activeGoals, label: 'Active goals', accent: true },
+              { value: showcase.children.milestones, label: 'Milestones' },
+              { value: showcase.children.activities, label: 'Activities', accent: true }
+            ]}
+            columns="grid-cols-2 md:grid-cols-3"
+          />
+          <LeaderboardTable class="mt-4" rows={showcase.children.topGoalDomains} labelHeader="Goal domains" valueHeader="Count" />
+        </ReportCard>
+
+        <ReportCard class="col-span-12" kicker="How to use this">
+          <div class="mt-3 grid gap-2 text-sm md:grid-cols-3">
+            <p><strong>Scope:</strong> Lifetime summary across all imported years in this workspace.</p>
+            <p><strong>Use case:</strong> Year-end narrative, family review meeting, advisor/CPA context packet.</p>
+            <p><strong>Workflow:</strong> Keep daily operations in Finance/Health/Children; generate this page as final showcase.</p>
+          </div>
+        </ReportCard>
+      </section>
+    </div>
+  </div>
+</BaseLayout>

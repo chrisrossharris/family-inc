@@ -3,6 +3,7 @@ import BaseLayout from '@/layouts/BaseLayout.astro';
 import { ENTITY_LABELS, SCHEDULE_C_CATEGORIES } from '@/lib/constants';
 import { getCategoryDistribution, getEntityLedger, getTopVendors } from '@/lib/services/reports';
 import { formatCurrency } from '@/lib/utils/format';
+import { normalizeReportYear } from '@/lib/utils/year';
 import type { Entity } from '@/lib/types';
 
 const entity = Astro.params.entity as Entity;
@@ -10,13 +11,22 @@ if (!entity || !Object.keys(ENTITY_LABELS).includes(entity)) {
   return Astro.redirect('/');
 }
 
-const categoryRows = await getCategoryDistribution(entity);
-const vendorRows = await getTopVendors(entity, 15);
-const ledgerRows = await getEntityLedger(entity);
+const tenantId = Astro.locals.tenantId;
+const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
+const updatedRows = Astro.url.searchParams.get('updated');
+const categoryRows = await getCategoryDistribution(tenantId, entity, selectedYear);
+const vendorRows = await getTopVendors(tenantId, entity, 15, selectedYear);
+const ledgerRows = await getEntityLedger(tenantId, entity, undefined, selectedYear);
 const total = categoryRows.reduce((acc, row) => acc + row.total, 0);
 ---
 
 <BaseLayout title={`${ENTITY_LABELS[entity]} Detail`} subtitle="Entity operating ledger and controls.">
+  {updatedRows && (
+    <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">
+      Updated {updatedRows} transaction{updatedRows === '1' ? '' : 's'}.
+    </div>
+  )}
+
   <section class="grid gap-4 lg:grid-cols-2">
     <article class="panel">
       <h2 class="panel-title">Category Table</h2>
@@ -47,7 +57,7 @@ const total = categoryRows.reduce((acc, row) => acc + row.total, 0);
           ))}
         </tbody>
       </table>
-      <a class="mt-4 inline-block border border-grid px-3 py-1 text-xs uppercase tracking-report" href={`/api/exports/${entity}.csv`}>Export {ENTITY_LABELS[entity]} CSV</a>
+      <a class="mt-4 inline-block border border-grid px-3 py-1 text-xs uppercase tracking-report" href={`/api/exports/${entity}.csv?year=${selectedYear}`}>Export {ENTITY_LABELS[entity]} CSV</a>
     </article>
   </section>
 
@@ -65,24 +75,36 @@ const total = categoryRows.reduce((acc, row) => acc + row.total, 0);
 
   <section class="panel mt-4 overflow-x-auto">
     <h2 class="panel-title">Transaction Ledger</h2>
-    <table class="table-report mt-3 w-full min-w-[1020px]">
-      <thead>
-        <tr><th>ID</th><th>Date</th><th>Vendor</th><th>Description</th><th>Account</th><th>Category</th><th>Confidence</th><th class="text-right">Amount</th></tr>
-      </thead>
-      <tbody>
-        {ledgerRows.map((row) => (
-          <tr>
-            <td class="mono-num">{row.id}</td>
-            <td>{row.date}</td>
-            <td>{row.vendor}</td>
-            <td class="max-w-[220px] truncate">{row.description}</td>
-            <td>{row.account}</td>
-            <td>{row.category}</td>
-            <td>{row.confidence}</td>
-            <td class="mono-num">{formatCurrency(row.amount)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <form method="post" action="/api/transactions-grid-update">
+      <input type="hidden" name="ids" value={ledgerRows.map((row) => row.id).join(',')} />
+      <p class="mb-2 text-[10px] uppercase tracking-report text-muted">Edit multiple rows, then press Enter in any field to save all.</p>
+      <table class="table-report mt-3 w-full min-w-[1100px]">
+        <thead>
+          <tr><th>ID</th><th>Date</th><th>Vendor</th><th>Description</th><th>Account</th><th>Category</th><th>Confidence</th><th class="text-right">Amount</th></tr>
+        </thead>
+        <tbody>
+          {ledgerRows.map((row) => (
+            <tr>
+              <td class="mono-num">{row.id}</td>
+              <td>{row.date}</td>
+              <td>
+                <input name={`vendor_${row.id}`} value={row.vendor} class="text-xs" title="Press Enter to save all edits" />
+                <input type="hidden" name={`entity_${row.id}`} value={row.entity} />
+              </td>
+              <td><input name={`description_${row.id}`} value={row.description ?? ''} class="text-xs" title="Press Enter to save all edits" /></td>
+              <td>{row.account}</td>
+              <td>
+                <select name={`category_${row.id}`} class="text-xs">
+                  {SCHEDULE_C_CATEGORIES.map((cat) => <option value={cat} selected={row.category === cat}>{cat}</option>)}
+                </select>
+              </td>
+              <td>{row.confidence}</td>
+              <td class="mono-num">{formatCurrency(row.amount)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <button type="submit" class="sr-only">Save all edits</button>
+    </form>
   </section>
 </BaseLayout>

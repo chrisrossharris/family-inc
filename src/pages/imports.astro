@@ -1,0 +1,124 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { normalizeReportYear } from '@/lib/utils/year';
+import { listImportJobs } from '@/lib/services/import-jobs';
+
+const tenantId = Astro.locals.tenantId;
+const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
+const jobs = await listImportJobs(tenantId, 100);
+const queued = Astro.url.searchParams.get('queued');
+const jobId = Astro.url.searchParams.get('jobId');
+---
+
+<BaseLayout title="Imports" subtitle="Background import queue and execution status.">
+  {queued && (
+    <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">
+      Import queued as job #{jobId ?? 'n/a'}. This page auto-refreshes running statuses.
+    </div>
+  )}
+
+  <section class="panel">
+    <h2 class="panel-title">Queue New Import</h2>
+    <form method="post" action="/api/import" enctype="multipart/form-data" class="mt-3 grid gap-2 md:grid-cols-4">
+      <input type="hidden" name="year" value={selectedYear} />
+      <input type="hidden" name="mode" value="background" />
+      <input type="file" name="file" accept=".csv" required class="md:col-span-3 text-sm" />
+      <button type="submit" class="border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Queue Import</button>
+    </form>
+    <p class="mt-2 text-xs text-muted">Queued/running jobs are polled every 3 seconds.</p>
+  </section>
+
+  <section class="panel mt-4 overflow-x-auto">
+    <h2 class="panel-title">Import Jobs</h2>
+    <table class="table-report mt-3 w-full min-w-[1320px]" id="import-jobs-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Status</th>
+          <th>Filename</th>
+          <th class="text-right">Inserted</th>
+          <th class="text-right">Skipped</th>
+          <th class="text-right">Duplicates</th>
+          <th class="text-right">Vendor Updates</th>
+          <th>Created</th>
+          <th>Completed</th>
+          <th>Error</th>
+        </tr>
+      </thead>
+      <tbody>
+        {jobs.map((job) => (
+          <tr data-job-id={job.id}>
+            <td class="mono-num">{job.id}</td>
+            <td data-field="status">
+              <span class:list={[
+                'inline-block border px-2 py-1 text-xs uppercase tracking-report',
+                job.status === 'failed'
+                  ? 'border-red-300 bg-red-50 text-red-900'
+                  : job.status === 'completed'
+                    ? 'border-grid'
+                    : 'border-amber-300 bg-amber-50 text-amber-900'
+              ]}>{job.status}</span>
+            </td>
+            <td class="max-w-[280px] truncate" title={job.filename}>{job.filename}</td>
+            <td class="mono-num" data-field="inserted">{job.inserted_count}</td>
+            <td class="mono-num" data-field="skipped">{job.skipped_count}</td>
+            <td class="mono-num" data-field="duplicates">{job.duplicates_count}</td>
+            <td class="mono-num" data-field="vendorUpdates">{job.vendor_updates_count}</td>
+            <td class="font-mono text-xs">{job.created_at}</td>
+            <td class="font-mono text-xs" data-field="completedAt">{job.completed_at ?? '—'}</td>
+            <td class="text-xs text-red-800" data-field="error">{job.error_message ?? '—'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </section>
+
+  <script is:inline>
+    const rows = Array.from(document.querySelectorAll('tr[data-job-id]'));
+    const activeRows = rows.filter((row) => {
+      const statusText = row.querySelector('[data-field="status"] span')?.textContent?.trim();
+      return statusText === 'queued' || statusText === 'running';
+    });
+
+    if (activeRows.length > 0) {
+      const updateRow = async (row) => {
+        const id = row.getAttribute('data-job-id');
+        if (!id) return false;
+        const res = await fetch(`/api/import-jobs/status?id=${id}`);
+        if (!res.ok) return false;
+        const data = await res.json();
+
+        const statusCell = row.querySelector('[data-field="status"]');
+        if (statusCell) {
+          const cls = data.status === 'failed'
+            ? 'inline-block border border-red-300 bg-red-50 px-2 py-1 text-xs uppercase tracking-report text-red-900'
+            : data.status === 'completed'
+              ? 'inline-block border border-grid px-2 py-1 text-xs uppercase tracking-report'
+              : 'inline-block border border-amber-300 bg-amber-50 px-2 py-1 text-xs uppercase tracking-report text-amber-900';
+          statusCell.innerHTML = `<span class="${cls}">${data.status}</span>`;
+        }
+
+        const setField = (name, value) => {
+          const el = row.querySelector(`[data-field="${name}"]`);
+          if (el) el.textContent = value ?? '—';
+        };
+
+        setField('inserted', String(data.inserted ?? 0));
+        setField('skipped', String(data.skipped ?? 0));
+        setField('duplicates', String(data.duplicates ?? 0));
+        setField('vendorUpdates', String(data.vendorUpdates ?? 0));
+        setField('completedAt', data.completedAt ?? '—');
+        setField('error', data.error ?? '—');
+
+        return data.status === 'queued' || data.status === 'running';
+      };
+
+      const interval = setInterval(async () => {
+        const stillActive = await Promise.all(activeRows.map((row) => updateRow(row)));
+        if (!stillActive.some(Boolean)) {
+          clearInterval(interval);
+        }
+      }, 3000);
+    }
+  </script>
+</BaseLayout>

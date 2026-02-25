@@ -6,6 +6,7 @@ const rawRowSchema = z.record(z.string(), z.string().optional().nullable());
 export interface NormalizedCsvRow {
   date: string;
   vendor: string;
+  legacyVendor: string;
   description: string;
   amount: number;
   account: string;
@@ -57,9 +58,13 @@ export function parseCsv(content: string): NormalizedCsvRow[] {
       if (!amount && outflow) normalizedAmount = toAmount(outflow);
       if (!amount && inflow) normalizedAmount = -Math.abs(toAmount(inflow));
 
+      const legacyVendor = pick(row, ['merchant', 'vendor', 'payee', 'name', 'description']) || 'Unknown Vendor';
+      const preferredVendor = pick(row, ['custom name', 'custom_name', 'merchant', 'vendor', 'payee', 'name', 'description']) || legacyVendor;
+
       return {
         date: toIsoDate(pick(row, ['date', 'posted date', 'transaction date'])),
-        vendor: pick(row, ['merchant', 'vendor', 'payee', 'name', 'description']) || 'Unknown Vendor',
+        vendor: preferredVendor,
+        legacyVendor,
         description: pick(row, ['description', 'memo', 'notes']) || '',
         amount: normalizedAmount,
         account: pick(row, ['account', 'account name', 'source']) || 'Unknown Account'

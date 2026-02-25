@@ -1,0 +1,71 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { normalizeReportYear } from '@/lib/utils/year';
+import { getHomeGroceriesOverview } from '@/lib/services/pillars';
+
+const tenantId = Astro.locals.tenantId;
+const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
+const saved = Astro.url.searchParams.get('saved');
+const overview = await getHomeGroceriesOverview(tenantId, selectedYear);
+const neededItems = overview.items.filter((item) => item.needed);
+const stockedItems = overview.items.filter((item) => !item.needed);
+---
+
+<BaseLayout title="Home & Groceries" subtitle="Practical household inventory and shopping queue.">
+  {saved && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Saved: {saved}</div>}
+
+  <section class="grid gap-4 md:grid-cols-4">
+    <article class="panel"><p class="panel-title">Items</p><p class="mono-num mt-2 text-2xl">{overview.stats.totalItems}</p></article>
+    <article class="panel"><p class="panel-title">Need Now</p><p class="mono-num mt-2 text-2xl">{overview.stats.neededNow}</p></article>
+    <article class="panel"><p class="panel-title">Stocked</p><p class="mono-num mt-2 text-2xl">{overview.stats.stocked}</p></article>
+    <article class="panel"><p class="panel-title">Purchased {selectedYear}</p><p class="mono-num mt-2 text-2xl">{overview.stats.purchasedThisYear}</p></article>
+  </section>
+
+  <section class="panel mt-4">
+    <h2 class="panel-title">Grocery Queue</h2>
+    <p class="mt-2 text-xs text-muted">
+      {overview.items.length === 0
+        ? 'No household inventory yet. Add recurring essentials first.'
+        : `${neededItems.length} needed now, ${stockedItems.length} stocked.`}
+    </p>
+    <details class="form-card mt-3" open={overview.items.length === 0}>
+      <summary>Add Grocery Item</summary>
+      <form method="post" action="/api/pillars/grocery" class="mt-3 grid gap-2 md:grid-cols-2">
+        <input type="hidden" name="year" value={selectedYear} />
+        <input type="text" name="item_name" required placeholder="Item name" />
+        <input type="text" name="category" required placeholder="Category" />
+        <input type="number" name="quantity" step="0.25" min="0" placeholder="Quantity" />
+        <input type="text" name="unit" placeholder="Unit (lb, pack, each)" />
+        <input type="date" name="last_purchased_on" />
+        <label class="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="needed" value="1" checked /> Needed now</label>
+        <textarea name="notes" rows="2" class="md:col-span-2" placeholder="Notes"></textarea>
+        <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Item</button>
+      </form>
+    </details>
+
+    <table class="table-report mt-4 w-full">
+      <thead><tr><th>Item</th><th>Category</th><th class="text-right">Qty</th><th>Needed</th><th>Last Purchased</th></tr></thead>
+      <tbody>
+        {overview.items.length === 0 && <tr><td colspan="5" class="text-xs text-muted">No items yet. Add staples like milk, snacks, meds, and cleaning supplies.</td></tr>}
+        {neededItems.map((row) => (
+          <tr>
+            <td>{row.item_name}</td>
+            <td>{row.category}</td>
+            <td class="mono-num">{row.quantity}{row.unit ? ` ${row.unit}` : ''}</td>
+            <td class="text-amber-900">Need now</td>
+            <td>{row.last_purchased_on ?? '—'}</td>
+          </tr>
+        ))}
+        {stockedItems.map((row) => (
+          <tr>
+            <td>{row.item_name}</td>
+            <td>{row.category}</td>
+            <td class="mono-num">{row.quantity}{row.unit ? ` ${row.unit}` : ''}</td>
+            <td>Stocked</td>
+            <td>{row.last_purchased_on ?? '—'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </section>
+</BaseLayout>

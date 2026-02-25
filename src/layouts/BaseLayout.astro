@@ -1,6 +1,9 @@
 ---
 import '@/styles/global.css';
-import { REPORT_PERIOD } from '@/lib/constants';
+import { getAvailableYears } from '@/lib/services/reports';
+import { listTenantsForUser } from '@/lib/services/tenants';
+import { DEFAULT_REPORT_YEAR, normalizeReportYear } from '@/lib/utils/year';
+import { SignedIn, SignedOut, UserButton } from '@clerk/astro/components';
 
 interface Props {
   title: string;
@@ -8,36 +11,199 @@ interface Props {
 }
 
 const { title, subtitle } = Astro.props;
+const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
+const currentTenantId = Astro.locals.tenantId;
+const currentUserId = Astro.locals.userId;
+const availableYears = await getAvailableYears(currentTenantId);
+const availableTenants = await listTenantsForUser(currentUserId);
+const currentUser = await Astro.locals.currentUser();
+const signedInLabel = currentUser?.fullName || currentUser?.username || currentUser?.primaryEmailAddress?.emailAddress || 'Authenticated User';
+const fontWeightPref = Astro.cookies.get('fi_font_weight')?.value === 'bold' ? 'bold' : 'normal';
+const path = Astro.url.pathname;
+const isHealth = Astro.url.pathname.startsWith('/health');
+const isChildren = Astro.url.pathname.startsWith('/children');
+const isAnnualReport = Astro.url.pathname.startsWith('/annual-report');
+const isGoalsProjects = Astro.url.pathname.startsWith('/goals-projects');
+const isTrips = Astro.url.pathname.startsWith('/trips');
+const isHomeGroceries = Astro.url.pathname.startsWith('/home-groceries');
+const isMilestones = Astro.url.pathname.startsWith('/milestones');
+const isFinance = !isHealth && !isChildren && !isAnnualReport && !isGoalsProjects && !isTrips && !isHomeGroceries && !isMilestones;
+const isFinanceOverview = path === '/';
+const isFinanceEntityChris = path === '/entity/chris';
+const isFinanceEntityKate = path === '/entity/kate';
+const isFinanceEntityBigPicture = path === '/entity/big_picture';
+const isFinanceNeedsReview = path === '/needs-review';
+const isFinanceDeductions = path === '/deductions';
+const isFinanceImports = path === '/imports';
+const isFinanceIncome = path === '/income';
+const isHealthDashboard = path === '/health';
+const isChildrenDashboard = path === '/children';
+
+function subNavClasses(active: boolean): string[] {
+  return ['border px-3 py-1 text-xs uppercase tracking-report', active ? 'border-ink bg-ink text-paper' : 'border-grid hover:bg-ink hover:text-paper'];
+}
+
+function withYear(path: string): string {
+  const next = new URL(path, Astro.url);
+  next.searchParams.set('year', selectedYear);
+  return `${next.pathname}${next.search}`;
+}
 ---
 
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{title} | Family Operating Dashboard</title>
+    <title>{title} | Family Inc</title>
   </head>
-  <body>
+  <body class:list={[fontWeightPref === 'bold' && 'a11y-bold']}>
     <main class="min-h-screen report-grid">
       <header class="border-b border-grid">
         <div class="mx-auto flex max-w-7xl flex-wrap items-end justify-between gap-4 px-4 py-6 md:px-8">
           <div>
-            <p class="text-xs uppercase tracking-report text-muted">Family Operating Dashboard</p>
+            <p class="text-xs uppercase tracking-report text-muted">Family Inc Platform</p>
+            <p class="mt-1 text-xs uppercase tracking-report text-accent">
+              Workspace: {availableTenants.find((tenant) => tenant.id === currentTenantId)?.name ?? currentTenantId}
+            </p>
             <h1 class="text-2xl font-semibold tracking-tight">{title}</h1>
             {subtitle && <p class="mt-1 text-sm text-muted">{subtitle}</p>}
           </div>
           <div class="text-right">
-            <p class="font-mono text-xs uppercase tracking-report text-muted">Period: {REPORT_PERIOD}</p>
+            <p class="font-mono text-xs uppercase tracking-report text-muted">{isAnnualReport ? 'Period: All Years' : `Period: YTD ${selectedYear}`}</p>
             <p class="text-xs text-muted">Meals deductible at 50%</p>
+            <SignedIn>
+              <p class="mt-1 text-xs text-muted">Signed in: {signedInLabel}</p>
+              <form method="post" action="/api/session/switch-tenant" class="mt-2 flex items-center justify-end gap-2">
+                <input type="hidden" name="returnTo" value={`${Astro.url.pathname}${Astro.url.search}`} />
+                <label for="tenant-switch" class="text-[10px] uppercase tracking-report text-muted">Workspace</label>
+                <select id="tenant-switch" name="tenantId" class="border border-grid bg-white px-2 py-1 text-xs" onchange="this.form.submit()">
+                  {availableTenants.length === 0 && <option value={currentTenantId}>{currentTenantId}</option>}
+                  {availableTenants.map((tenant) => <option value={tenant.id} selected={tenant.id === currentTenantId}>{tenant.name}</option>)}
+                </select>
+              </form>
+              <form method="get" action={Astro.url.pathname} class="mt-2 flex items-center justify-end gap-2">
+                <label for="year-switch" class="text-[10px] uppercase tracking-report text-muted">Year</label>
+                <select id="year-switch" name="year" class="border border-grid bg-white px-2 py-1 text-xs" onchange="this.form.submit()">
+                  {availableYears.map((year) => <option value={year} selected={year === selectedYear}>{year}</option>)}
+                  {!availableYears.includes(DEFAULT_REPORT_YEAR) && <option value={DEFAULT_REPORT_YEAR}>{DEFAULT_REPORT_YEAR}</option>}
+                </select>
+              </form>
+              <form method="post" action="/api/session/accessibility" class="mt-2 flex items-center justify-end gap-2">
+                <input type="hidden" name="returnTo" value={`${Astro.url.pathname}${Astro.url.search}`} />
+                <span class="text-[10px] uppercase tracking-report text-muted">Text</span>
+                <button
+                  type="submit"
+                  name="fontWeight"
+                  value="normal"
+                  class:list={[
+                    'border px-2 py-1 text-[10px] uppercase tracking-report',
+                    fontWeightPref === 'normal' ? 'border-ink bg-ink text-paper' : 'border-grid hover:bg-ink hover:text-paper'
+                  ]}
+                >
+                  Normal
+                </button>
+                <button
+                  type="submit"
+                  name="fontWeight"
+                  value="bold"
+                  class:list={[
+                    'border px-2 py-1 text-[10px] uppercase tracking-report',
+                    fontWeightPref === 'bold' ? 'border-ink bg-ink text-paper' : 'border-grid hover:bg-ink hover:text-paper'
+                  ]}
+                >
+                  Bold
+                </button>
+              </form>
+              <div class="mt-3 flex flex-wrap items-center justify-end gap-2">
+                <a class="border border-ink bg-ink px-2 py-1 text-[10px] uppercase tracking-report text-paper hover:opacity-90" href={withYear('/annual-report')}>Annual Report</a>
+                <a class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper" href={withYear('/members')}>Invite Family Member</a>
+                <a class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper" href={withYear('/settings')}>Settings</a>
+                <div class="inline-flex border border-grid px-1 py-0.5"><UserButton /></div>
+              </div>
+            </SignedIn>
+            <SignedOut>
+              <div class="mt-3 flex flex-wrap justify-end gap-2">
+                <a class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper" href="/sign-in">Sign in</a>
+                <a class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper" href="/sign-up">Create account</a>
+              </div>
+            </SignedOut>
           </div>
         </div>
-        <nav class="mx-auto flex max-w-7xl flex-wrap gap-2 px-4 pb-4 md:px-8">
-          <a class="border border-grid px-3 py-1 text-xs uppercase tracking-report hover:bg-ink hover:text-paper" href="/">Operating Report</a>
-          <a class="border border-grid px-3 py-1 text-xs uppercase tracking-report hover:bg-ink hover:text-paper" href="/entity/chris">Chris</a>
-          <a class="border border-grid px-3 py-1 text-xs uppercase tracking-report hover:bg-ink hover:text-paper" href="/entity/kate">Kate</a>
-          <a class="border border-grid px-3 py-1 text-xs uppercase tracking-report hover:bg-ink hover:text-paper" href="/entity/big_picture">Big Picture</a>
-          <a class="border border-grid px-3 py-1 text-xs uppercase tracking-report hover:bg-ink hover:text-paper" href="/needs-review">Needs Review</a>
-          <a class="border border-grid px-3 py-1 text-xs uppercase tracking-report hover:bg-ink hover:text-paper" href="/deductions">Deductions</a>
-        </nav>
+        <div class="mx-auto max-w-7xl px-4 pb-3 md:px-8">
+          <p class="mb-2 text-[10px] uppercase tracking-report text-muted">Pillars</p>
+          <nav class="flex flex-wrap gap-2">
+            <a class:list={['border px-3 py-1 text-xs uppercase tracking-report', isFinance ? 'border-ink bg-ink text-paper' : 'border-grid hover:bg-ink hover:text-paper']} href={withYear('/')}>Finance</a>
+            <a class:list={['border px-3 py-1 text-xs uppercase tracking-report', isHealth ? 'border-ink bg-ink text-paper' : 'border-grid hover:bg-ink hover:text-paper']} href={withYear('/health')}>Health</a>
+            <a class:list={['border px-3 py-1 text-xs uppercase tracking-report', isChildren ? 'border-ink bg-ink text-paper' : 'border-grid hover:bg-ink hover:text-paper']} href={withYear('/children')}>Children</a>
+            <a class:list={['border px-3 py-1 text-xs uppercase tracking-report', isGoalsProjects ? 'border-ink bg-ink text-paper' : 'border-grid hover:bg-ink hover:text-paper']} href={withYear('/goals-projects')}>Goals & Projects</a>
+            <a class:list={['border px-3 py-1 text-xs uppercase tracking-report', isTrips ? 'border-ink bg-ink text-paper' : 'border-grid hover:bg-ink hover:text-paper']} href={withYear('/trips')}>Trips</a>
+            <a class:list={['border px-3 py-1 text-xs uppercase tracking-report', isHomeGroceries ? 'border-ink bg-ink text-paper' : 'border-grid hover:bg-ink hover:text-paper']} href={withYear('/home-groceries')}>Home & Groceries</a>
+            <a class:list={['border px-3 py-1 text-xs uppercase tracking-report', isMilestones ? 'border-ink bg-ink text-paper' : 'border-grid hover:bg-ink hover:text-paper']} href={withYear('/milestones')}>Milestones</a>
+          </nav>
+        </div>
+        {isFinance && (
+          <div class="mx-auto max-w-7xl border-t border-grid px-4 pb-4 pt-3 md:px-8">
+            <p class="mb-2 text-[10px] uppercase tracking-report text-muted">Finance Workspace</p>
+            <nav class="flex flex-wrap gap-2">
+              <a class:list={subNavClasses(isFinanceOverview)} href={withYear('/')}>Operating Report</a>
+              <a class:list={subNavClasses(isFinanceEntityChris)} href={withYear('/entity/chris')}>Chris</a>
+              <a class:list={subNavClasses(isFinanceEntityKate)} href={withYear('/entity/kate')}>Kate</a>
+              <a class:list={subNavClasses(isFinanceEntityBigPicture)} href={withYear('/entity/big_picture')}>Big Picture</a>
+              <a class:list={subNavClasses(isFinanceIncome)} href={withYear('/income')}>Income</a>
+              <a class:list={subNavClasses(isFinanceNeedsReview)} href={withYear('/needs-review')}>Needs Review</a>
+              <a class:list={subNavClasses(isFinanceDeductions)} href={withYear('/deductions')}>Deductions</a>
+              <a class:list={subNavClasses(isFinanceImports)} href={withYear('/imports')}>Imports</a>
+            </nav>
+          </div>
+        )}
+        {isHealth && (
+          <div class="mx-auto max-w-7xl border-t border-grid px-4 pb-4 pt-3 md:px-8">
+            <p class="mb-2 text-[10px] uppercase tracking-report text-muted">Health Workspace</p>
+            <nav class="flex flex-wrap gap-2">
+              <a class:list={subNavClasses(isHealthDashboard)} href={withYear('/health')}>Health Dashboard</a>
+            </nav>
+          </div>
+        )}
+        {isChildren && (
+          <div class="mx-auto max-w-7xl border-t border-grid px-4 pb-4 pt-3 md:px-8">
+            <p class="mb-2 text-[10px] uppercase tracking-report text-muted">Children Workspace</p>
+            <nav class="flex flex-wrap gap-2">
+              <a class:list={subNavClasses(isChildrenDashboard)} href={withYear('/children')}>Children Dashboard</a>
+            </nav>
+          </div>
+        )}
+        {isGoalsProjects && (
+          <div class="mx-auto max-w-7xl border-t border-grid px-4 pb-4 pt-3 md:px-8">
+            <p class="mb-2 text-[10px] uppercase tracking-report text-muted">Goals & Projects Workspace</p>
+            <nav class="flex flex-wrap gap-2">
+              <a class:list={subNavClasses(true)} href={withYear('/goals-projects')}>Goals & Projects</a>
+            </nav>
+          </div>
+        )}
+        {isTrips && (
+          <div class="mx-auto max-w-7xl border-t border-grid px-4 pb-4 pt-3 md:px-8">
+            <p class="mb-2 text-[10px] uppercase tracking-report text-muted">Trips Workspace</p>
+            <nav class="flex flex-wrap gap-2">
+              <a class:list={subNavClasses(true)} href={withYear('/trips')}>Trips Dashboard</a>
+            </nav>
+          </div>
+        )}
+        {isHomeGroceries && (
+          <div class="mx-auto max-w-7xl border-t border-grid px-4 pb-4 pt-3 md:px-8">
+            <p class="mb-2 text-[10px] uppercase tracking-report text-muted">Home & Groceries Workspace</p>
+            <nav class="flex flex-wrap gap-2">
+              <a class:list={subNavClasses(true)} href={withYear('/home-groceries')}>Home & Groceries</a>
+            </nav>
+          </div>
+        )}
+        {isMilestones && (
+          <div class="mx-auto max-w-7xl border-t border-grid px-4 pb-4 pt-3 md:px-8">
+            <p class="mb-2 text-[10px] uppercase tracking-report text-muted">Milestones Workspace</p>
+            <nav class="flex flex-wrap gap-2">
+              <a class:list={subNavClasses(true)} href={withYear('/milestones')}>Milestones Timeline</a>
+            </nav>
+          </div>
+        )}
       </header>
       <section class="mx-auto max-w-7xl px-4 py-6 md:px-8">
         <slot />

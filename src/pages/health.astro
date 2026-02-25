@@ -1,0 +1,284 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { normalizeReportYear } from '@/lib/utils/year';
+import { getHealthOverview, listFamilyMembers } from '@/lib/services/health';
+
+const tenantId = Astro.locals.tenantId;
+const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
+const saved = Astro.url.searchParams.get('saved');
+const members = await listFamilyMembers(tenantId);
+const allMembers = await listFamilyMembers(tenantId, { includeInactive: true });
+const overview = await getHealthOverview(tenantId, selectedYear);
+const totalEpisodes = overview.stats.symptomEntries;
+const highPct = totalEpisodes > 0 ? (overview.stats.highSeverityEpisodes / totalEpisodes) * 100 : 0;
+const scheduledAppointments = overview.upcomingApptList.filter((row) => row.status === 'scheduled');
+const memberCount = members.length;
+const symptomCount = overview.recentSymptoms.length;
+const sickDayCount = overview.stats.sickDays;
+const allergyCount = overview.allergies.length;
+const medicationCount = overview.stats.activeMedications;
+const appointmentCount = overview.upcomingApptList.length;
+
+const memberSnapshots = members.map((member) => {
+  const allergyCount = overview.allergies.filter((a) => a.member_name === member.name && a.active === 1).length;
+  const symptomCount = overview.recentSymptoms.filter((s) => s.member_name === member.name).length;
+  const nextAppointment = scheduledAppointments.find((a) => a.member_name === member.name);
+  return {
+    ...member,
+    allergyCount,
+    symptomCount,
+    nextAppointment: nextAppointment?.appointment_date ?? null
+  };
+});
+---
+
+<BaseLayout title="Health & Wellness" subtitle="Parent care cockpit for children, spouse, and household wellness.">
+  {saved && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Saved: {saved}</div>}
+
+  <section class="panel mb-4">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <p class="panel-title">Today&apos;s Parent Brief</p>
+        <p class="mt-1 text-sm text-muted">Track who needs attention now, then log updates in one place.</p>
+      </div>
+      <div class="flex flex-wrap gap-2 text-[10px] uppercase tracking-report">
+        <a class="border border-grid px-2 py-1 hover:bg-ink hover:text-paper" href="#symptom-log">Log Symptom</a>
+        <a class="border border-grid px-2 py-1 hover:bg-ink hover:text-paper" href="#appointments">Schedule Appointment</a>
+        <a class="border border-grid px-2 py-1 hover:bg-ink hover:text-paper" href="#allergies">Update Allergy</a>
+        <a class="border border-grid px-2 py-1 hover:bg-ink hover:text-paper" href="#medications">Update Medication</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+    <article class="panel"><p class="panel-title">Symptom Entries ({selectedYear})</p><p class="mono-num mt-2 text-2xl">{overview.stats.symptomEntries}</p><p class="text-xs text-muted">Household total</p></article>
+    <article class="panel"><p class="panel-title">High Severity (4-5)</p><p class="mono-num mt-2 text-2xl">{overview.stats.highSeverityEpisodes}</p><p class="text-xs text-muted">{highPct.toFixed(1)}% of episodes</p></article>
+    <article class="panel"><p class="panel-title">Sick Days ({selectedYear})</p><p class="mono-num mt-2 text-2xl">{overview.stats.sickDays}</p></article>
+    <article class="panel"><p class="panel-title">Active Allergies</p><p class="mono-num mt-2 text-2xl">{overview.stats.activeAllergies}</p></article>
+    <article class="panel"><p class="panel-title">Active Medications</p><p class="mono-num mt-2 text-2xl">{overview.stats.activeMedications}</p></article>
+    <article class="panel"><p class="panel-title">Upcoming Appointments</p><p class="mono-num mt-2 text-2xl">{overview.stats.upcomingAppointments}</p><p class="text-xs text-muted">Scheduled only</p></article>
+  </section>
+
+  <section class="panel mt-4 overflow-x-auto">
+    <h2 class="panel-title">Family Care Snapshot</h2>
+    <table class="table-report mt-3 w-full min-w-[920px]">
+      <thead><tr><th>Member</th><th>Relation</th><th class="text-right">Recent Symptoms</th><th class="text-right">Active Allergies</th><th>Next Appointment</th><th>Status</th></tr></thead>
+      <tbody>
+        {memberSnapshots.map((member) => (
+          <tr>
+            <td class="font-medium">{member.name}</td>
+            <td>{member.relation}</td>
+            <td class="mono-num">{member.symptomCount}</td>
+            <td class="mono-num">{member.allergyCount}</td>
+            <td>{member.nextAppointment ?? '—'}</td>
+            <td>
+              {member.allergyCount > 0 || member.symptomCount > 2 ? (
+                <span class="inline-block border border-red-300 bg-red-50 px-2 py-1 text-[10px] uppercase tracking-report text-red-900">Watch</span>
+              ) : (
+                <span class="inline-block border border-grid px-2 py-1 text-[10px] uppercase tracking-report">Stable</span>
+              )}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="mt-4 grid gap-4 lg:grid-cols-2">
+    <article class="panel" id="members">
+      <h2 class="panel-title">Family Members</h2>
+      <p class="mt-2 text-xs text-muted">{memberCount === 0 ? 'No family members yet. Add your first member.' : `${memberCount} active family member${memberCount === 1 ? '' : 's'}.`}</p>
+      <details class="form-card mt-3" open={memberCount === 0}>
+        <summary>Add Family Member</summary>
+        <form method="post" action="/api/health/member" class="mt-3 grid gap-2 md:grid-cols-2">
+          <input type="hidden" name="year" value={selectedYear} />
+          <input type="text" name="name" required placeholder="Name" />
+          <input type="text" name="relation" required placeholder="Relation (self, spouse, child)" />
+          <input type="date" name="birth_date" />
+          <input type="text" name="notes" placeholder="Health notes" />
+          <label class="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="is_active" value="1" checked /> Active</label>
+          <button type="submit" class="border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Add Member</button>
+        </form>
+      </details>
+      <table class="table-report mt-4 w-full">
+        <thead><tr><th>Name</th><th>Relation</th><th>Birth Date</th><th>Notes</th><th>Active</th><th>Edit</th></tr></thead>
+        <tbody>
+          {allMembers.length === 0 && <tr><td colspan="6" class="text-xs text-muted">No members yet.</td></tr>}
+          {allMembers.map((member) => (
+            <tr>
+              <td>
+                <input form={`member-edit-${member.id}`} type="text" name="name" required value={member.name} class="text-xs" />
+              </td>
+              <td>
+                <input form={`member-edit-${member.id}`} type="text" name="relation" required value={member.relation} class="text-xs" />
+              </td>
+              <td>
+                <input form={`member-edit-${member.id}`} type="date" name="birth_date" value={member.birth_date ?? ''} class="text-xs" />
+              </td>
+              <td>
+                <input form={`member-edit-${member.id}`} type="text" name="notes" value={member.notes ?? ''} class="text-xs" />
+              </td>
+              <td>
+                <label class="inline-flex items-center gap-2 text-xs">
+                  <input form={`member-edit-${member.id}`} type="checkbox" name="is_active" value="1" checked={member.is_active === 1} />
+                  {member.is_active === 1 ? 'Yes' : 'No'}
+                </label>
+              </td>
+              <td>
+                <button form={`member-edit-${member.id}`} type="submit" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Save</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {allMembers.map((member) => (
+        <form id={`member-edit-${member.id}`} method="post" action="/api/health/member" class="hidden">
+          <input type="hidden" name="year" value={selectedYear} />
+          <input type="hidden" name="id" value={member.id} />
+        </form>
+      ))}
+    </article>
+
+    <article class="panel" id="symptom-log">
+      <h2 class="panel-title">Log Symptom Episode (Child/Spouse/Self)</h2>
+      <p class="mt-2 text-xs text-muted">{symptomCount === 0 ? 'No symptom entries yet.' : `${symptomCount} recent symptom entries shown.`}</p>
+      <details class="form-card mt-3" open={symptomCount === 0}>
+        <summary>Add Symptom Log</summary>
+        <form method="post" action="/api/health/symptom" class="mt-3 grid gap-2 md:grid-cols-2">
+          <input type="hidden" name="year" value={selectedYear} />
+          <select name="member_id"><option value="">Unassigned</option>{members.map((m) => <option value={m.id}>{m.name}</option>)}</select>
+          <input type="date" name="occurred_on" required />
+          <input type="text" name="symptom" required placeholder="Symptom (headache, rash, cough)" class="md:col-span-2" />
+          <select name="severity" required><option value="1">1 - mild</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5 - severe</option></select>
+          <input type="number" step="0.25" min="0" name="duration_hours" placeholder="Duration hours" />
+          <input type="text" name="trigger" placeholder="Possible trigger" class="md:col-span-2" />
+          <textarea name="notes" rows="2" placeholder="Context / interventions" class="md:col-span-2"></textarea>
+          <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Symptom Log</button>
+        </form>
+      </details>
+    </article>
+  </section>
+
+  <section class="mt-4 grid gap-4 lg:grid-cols-3">
+    <article class="panel" id="sick-days">
+      <h2 class="panel-title">Sick Day Log (School/Work Impact)</h2>
+      <details class="form-card mt-3" open={sickDayCount === 0}>
+        <summary>Add Sick Day</summary>
+        <form method="post" action="/api/health/sick-day" class="mt-3 grid gap-2">
+        <input type="hidden" name="year" value={selectedYear} />
+        <select name="member_id" required>{members.map((m) => <option value={m.id}>{m.name}</option>)}</select>
+        <input type="date" name="start_date" required />
+        <input type="date" name="end_date" required />
+        <input type="text" name="reason" required placeholder="Reason" />
+        <label class="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="fever" value="1" /> Fever present</label>
+        <label class="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="school_work_missed" value="1" checked /> Missed school/work</label>
+        <textarea name="notes" rows="2" placeholder="Notes"></textarea>
+        <button type="submit" class="border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Sick Day</button>
+        </form>
+      </details>
+    </article>
+
+    <article class="panel" id="allergies">
+      <h2 class="panel-title">Allergy Profile & Emergency Prep</h2>
+      <p class="mt-2 text-xs text-muted">{allergyCount === 0 ? 'No allergy profile data yet.' : `${allergyCount} allergy entries tracked.`}</p>
+      <details class="form-card mt-3" open={allergyCount === 0}>
+        <summary>Add Allergy</summary>
+        <form method="post" action="/api/health/allergy" class="mt-3 grid gap-2">
+        <input type="hidden" name="year" value={selectedYear} />
+        <select name="member_id" required>{members.map((m) => <option value={m.id}>{m.name}</option>)}</select>
+        <input type="text" name="allergen" required placeholder="Allergen" />
+        <input type="text" name="reaction" required placeholder="Reaction" />
+        <select name="severity" required><option value="1">1 - mild</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5 - severe</option></select>
+        <label class="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="has_epinephrine" value="1" /> Epinephrine available</label>
+        <textarea name="notes" rows="2" placeholder="Avoidance / plan"></textarea>
+        <button type="submit" class="border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Allergy</button>
+        </form>
+      </details>
+    </article>
+
+    <article class="panel" id="medications">
+      <h2 class="panel-title">Medication Tracker</h2>
+      <details class="form-card mt-3" open={medicationCount === 0}>
+        <summary>Add Medication</summary>
+        <form method="post" action="/api/health/medication" class="mt-3 grid gap-2">
+        <input type="hidden" name="year" value={selectedYear} />
+        <select name="member_id" required>{members.map((m) => <option value={m.id}>{m.name}</option>)}</select>
+        <input type="text" name="medication_name" required placeholder="Medication" />
+        <input type="text" name="dosage" required placeholder="Dosage" />
+        <input type="text" name="frequency" required placeholder="Frequency" />
+        <input type="date" name="start_date" required />
+        <input type="date" name="end_date" placeholder="End date" />
+        <input type="text" name="prescribed_by" placeholder="Prescriber" />
+        <textarea name="notes" rows="2" placeholder="Instructions / side effects"></textarea>
+        <button type="submit" class="border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Medication</button>
+        </form>
+      </details>
+    </article>
+  </section>
+
+  <section class="mt-4 grid gap-4 lg:grid-cols-2">
+    <article class="panel" id="appointments">
+      <h2 class="panel-title">Appointments</h2>
+      <p class="mt-2 text-xs text-muted">{appointmentCount === 0 ? 'No appointments logged yet.' : `${appointmentCount} appointments in history.`}</p>
+      <details class="form-card mt-3" open={appointmentCount === 0}>
+        <summary>Add Appointment</summary>
+        <form method="post" action="/api/health/appointment" class="mt-3 grid gap-2 md:grid-cols-2">
+        <input type="hidden" name="year" value={selectedYear} />
+        <select name="member_id" required>{members.map((m) => <option value={m.id}>{m.name}</option>)}</select>
+        <input type="date" name="appointment_date" required />
+        <input type="text" name="provider" required placeholder="Provider" />
+        <input type="text" name="appointment_type" required placeholder="Visit type" />
+        <select name="status"><option value="scheduled">Scheduled</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select>
+        <input type="date" name="follow_up_date" placeholder="Follow-up date" />
+        <textarea name="notes" rows="2" class="md:col-span-2" placeholder="Agenda / prep"></textarea>
+        <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Appointment</button>
+        </form>
+      </details>
+      <table class="table-report mt-4 w-full">
+        <thead><tr><th>Date</th><th>Member</th><th>Provider</th><th>Status</th></tr></thead>
+        <tbody>
+          {overview.upcomingApptList.map((row) => (
+            <tr>
+              <td>{row.appointment_date}</td>
+              <td>{row.member_name ?? '—'}</td>
+              <td>{row.provider}</td>
+              <td>{row.status}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </article>
+
+    <article class="panel">
+      <h2 class="panel-title">Recent Symptom Feed</h2>
+      <table class="table-report mt-3 w-full">
+        <thead><tr><th>Date</th><th>Member</th><th>Symptom</th><th class="text-right">Severity</th></tr></thead>
+        <tbody>
+          {overview.recentSymptoms.map((row) => (
+            <tr>
+              <td>{row.occurred_on}</td>
+              <td>{row.member_name ?? '—'}</td>
+              <td>{row.symptom}</td>
+              <td class="mono-num">{row.severity}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <h3 class="panel-title mt-5">Allergy Watchlist</h3>
+      <table class="table-report mt-3 w-full">
+        <thead><tr><th>Member</th><th>Allergen</th><th>Reaction</th><th class="text-right">Severity</th></tr></thead>
+        <tbody>
+          {overview.allergies.map((row) => (
+            <tr>
+              <td>{row.member_name ?? '—'}</td>
+              <td>{row.allergen}</td>
+              <td>{row.reaction}</td>
+              <td class="mono-num">{row.severity}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </article>
+  </section>
+</BaseLayout>

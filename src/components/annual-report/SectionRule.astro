@@ -1,0 +1,14 @@
+---
+interface Props {
+  kicker?: string;
+  class?: string;
+}
+
+const { kicker, class: className } = Astro.props as Props;
+---
+
+<div class:list={[className]}>
+  {kicker && <p class="ar-kicker">{kicker}</p>}
+  <div class="ar-rule"></div>
+  <slot />
+</div>

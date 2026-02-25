@@ -35,23 +35,26 @@ const seedRules: SeedRule[] = [
   { match_type: 'contains', match_value: 'john irwin', entity: 'chris', category: 'Contract Labor', deductible_flag: 1 },
   { match_type: 'contains', match_value: 'drew micco', entity: 'chris', category: 'Contract Labor', deductible_flag: 1 }
 ];
+const tenantId = 'harris_holdings';
 
 async function run() {
   await db.transaction(async (tx) => {
     for (const rule of seedRules) {
       await tx.run(
-        `INSERT INTO vendor_rules (match_type, match_value, entity, category, deductible_flag, notes)
-         SELECT ?, ?, ?, ?, ?, ?
+        `INSERT INTO vendor_rules (tenant_id, match_type, match_value, entity, category, deductible_flag, notes)
+         SELECT ?, ?, ?, ?, ?, ?, ?
          WHERE NOT EXISTS (
-           SELECT 1 FROM vendor_rules WHERE match_type = ? AND match_value = ? AND entity = ?
+           SELECT 1 FROM vendor_rules WHERE tenant_id = ? AND match_type = ? AND match_value = ? AND entity = ?
          )`,
         [
+          tenantId,
           rule.match_type,
           rule.match_value,
           rule.entity,
           rule.category,
           rule.deductible_flag,
           rule.notes ?? null,
+          tenantId,
           rule.match_type,
           rule.match_value,
           rule.entity

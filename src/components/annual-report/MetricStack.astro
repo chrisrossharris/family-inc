@@ -1,0 +1,27 @@
+---
+export interface MetricItem {
+  label: string;
+  value: string | number;
+  accent?: boolean;
+  subline?: string;
+  narrow?: boolean;
+}
+
+interface Props {
+  metrics: MetricItem[];
+  class?: string;
+  columns?: string;
+}
+
+const { metrics, class: className, columns = 'grid-cols-2 md:grid-cols-4' } = Astro.props as Props;
+---
+
+<div class:list={['mt-3 grid gap-4', columns, className]}>
+  {metrics.map((metric) => (
+    <div>
+      <p class:list={['ar-display', metric.accent && 'ar-display-accent', metric.narrow && 'ar-narrow']}>{metric.value}</p>
+      <p class="ar-subline">{metric.label}</p>
+      {metric.subline && <p class="mt-1 text-xs text-[#575a5f]">{metric.subline}</p>}
+    </div>
+  ))}
+</div>

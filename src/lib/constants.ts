@@ -1,6 +1,4 @@
-import type { Entity, ScheduleCCategory } from './types';
-
-export const REPORT_PERIOD = `YTD ${process.env.REPORT_YEAR ?? '2025'}`;
+import type { Entity, IncomeSourceType, ScheduleCCategory } from './types';
 
 export const DEFAULT_ENTITY: Entity = 'big_picture';
 
@@ -20,6 +18,14 @@ export const ENTITY_LABELS: Record<Entity, string> = {
   chris: 'Chris',
   kate: 'Kate',
   big_picture: 'Big Picture'
+};
+
+export const INCOME_SOURCE_LABELS: Record<IncomeSourceType, string> = {
+  client_payment: 'Client Payment',
+  gift: 'Gift',
+  unemployment: 'Unemployment',
+  food_stamps: 'Food Stamps',
+  other: 'Other'
 };
 
 export const MEALS_DEDUCTIBLE_RATE = 0.5;

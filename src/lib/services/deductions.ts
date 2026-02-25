@@ -3,6 +3,7 @@ import type { DeductionType, Entity } from '@/lib/types';
 
 export interface DeductionRecord {
   id: number;
+  tenant_id: string;
   entity: Entity;
   type: DeductionType;
   payload_json: string;
@@ -10,19 +11,21 @@ export interface DeductionRecord {
   updated_at: string;
 }
 
-export async function upsertDeduction(entity: Entity, type: DeductionType, payload: Record<string, unknown>) {
+export async function upsertDeduction(tenantId: string, entity: Entity, type: DeductionType, payload: Record<string, unknown>) {
   await db.run(
-    `INSERT INTO deductions (entity, type, payload_json, created_at, updated_at)
-     VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-     ON CONFLICT(entity, type)
+    `INSERT INTO deductions (tenant_id, entity, type, payload_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+     ON CONFLICT(tenant_id, entity, type)
      DO UPDATE SET payload_json = excluded.payload_json, updated_at = CURRENT_TIMESTAMP`,
-    [entity, type, JSON.stringify(payload)]
+    [tenantId, entity, type, JSON.stringify(payload)]
   );
 }
 
-export async function getDeductions(entity?: Entity) {
-  const sql = entity ? 'SELECT * FROM deductions WHERE entity = ?' : 'SELECT * FROM deductions';
-  const rows = entity ? await db.all<DeductionRecord>(sql, [entity]) : await db.all<DeductionRecord>(sql);
+export async function getDeductions(tenantId: string, entity?: Entity) {
+  const sql = entity
+    ? 'SELECT * FROM deductions WHERE tenant_id = ? AND entity = ?'
+    : 'SELECT * FROM deductions WHERE tenant_id = ?';
+  const rows = entity ? await db.all<DeductionRecord>(sql, [tenantId, entity]) : await db.all<DeductionRecord>(sql, [tenantId]);
 
   return rows.map((row) => ({
     ...row,
@@ -30,8 +33,8 @@ export async function getDeductions(entity?: Entity) {
   }));
 }
 
-export async function calculateDeductionTotals(entity: Entity) {
-  const records = await getDeductions(entity);
+export async function calculateDeductionTotals(tenantId: string, entity: Entity) {
+  const records = await getDeductions(tenantId, entity);
   let total = 0;
 
   for (const record of records) {

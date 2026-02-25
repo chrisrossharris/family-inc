@@ -7,6 +7,7 @@ export type Confidence = (typeof CONFIDENCE_LEVELS)[number];
 export type MatchType = 'exact' | 'contains' | 'regex';
 
 export type DeductionType = 'home_office' | 'mileage' | 'phone' | 'equipment';
+export type IncomeSourceType = 'client_payment' | 'gift' | 'unemployment' | 'food_stamps' | 'other';
 
 export type ScheduleCCategory =
   | 'Advertising & Marketing (Lead Gen)'

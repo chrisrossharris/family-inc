@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,500;8..60,700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -11,6 +11,31 @@
 
 body {
   @apply bg-paper text-ink font-sans antialiased;
+}
+
+body.a11y-bold {
+  font-weight: 500;
+}
+
+body.a11y-bold h1,
+body.a11y-bold h2,
+body.a11y-bold h3,
+body.a11y-bold h4,
+body.a11y-bold th,
+body.a11y-bold strong {
+  font-weight: 700;
+}
+
+body.a11y-bold .mono-num {
+  font-weight: 700;
+}
+
+details.form-card > summary {
+  @apply cursor-pointer border border-grid bg-white/30 px-2 py-1 text-[10px] uppercase tracking-report text-muted;
+}
+
+details.form-card[open] > summary {
+  @apply bg-ink text-paper;
 }
 
 .report-grid {
@@ -45,9 +70,144 @@ body {
 }
 
 .needs-review-table td {
-  @apply align-top;
+  @apply align-top py-1;
 }
 
 .needs-review-table select {
-  @apply w-full border-grid bg-white text-ink;
+  @apply w-full border-grid bg-transparent px-1 py-0.5 text-ink;
+}
+
+.needs-review-table input,
+.needs-review-table textarea {
+  @apply w-full border border-grid bg-transparent px-1 py-0.5 text-ink;
+}
+
+.annual-report {
+  --ar-bg: #dfe1e5;
+  --ar-ink: #101112;
+  --ar-muted: #575a5f;
+  --ar-accent: #39b9d8;
+  --ar-panel: #eef0f3;
+  background: var(--ar-bg);
+  color: var(--ar-ink);
+}
+
+.annual-report .ar-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+}
+
+.annual-report .ar-grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+.annual-report .ar-card {
+  background: color-mix(in oklab, var(--ar-panel) 85%, white 15%);
+  border: 1px solid color-mix(in oklab, var(--ar-ink) 14%, transparent);
+  padding: 0.9rem;
+}
+
+.annual-report .ar-kicker {
+  font-size: 0.67rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ar-muted);
+}
+
+.annual-report .ar-rule {
+  margin-top: 0.38rem;
+  height: 4px;
+  background: repeating-linear-gradient(
+    to right,
+    color-mix(in oklab, var(--ar-ink) 60%, transparent) 0,
+    color-mix(in oklab, var(--ar-ink) 60%, transparent) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+.annual-report .ar-title {
+  font-family: 'Source Serif 4', Georgia, serif;
+  font-size: clamp(2rem, 5vw, 4.5rem);
+  line-height: 0.95;
+  margin-top: 0.75rem;
+}
+
+.annual-report .ar-display {
+  font-family: 'Bebas Neue', 'IBM Plex Sans', sans-serif;
+  font-size: clamp(3rem, 12vw, 9.5rem);
+  letter-spacing: 0.02em;
+  line-height: 0.9;
+}
+
+.annual-report .ar-display-accent {
+  color: var(--ar-accent);
+}
+
+.annual-report .ar-subline {
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid color-mix(in oklab, var(--ar-ink) 55%, transparent);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.annual-report .ar-narrow {
+  font-family: 'Bebas Neue', 'IBM Plex Sans', sans-serif;
+  letter-spacing: 0.04em;
+  line-height: 0.9;
+}
+
+.annual-report .ar-ring {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: 9999px;
+  border: 26px solid var(--ar-accent);
+  background: transparent;
+}
+
+.annual-report .ar-ring::before {
+  content: '';
+  position: absolute;
+  inset: -26px;
+  border-radius: 9999px;
+  border: 26px solid transparent;
+  border-top-color: color-mix(in oklab, var(--ar-ink) 22%, var(--ar-bg));
+  border-right-color: color-mix(in oklab, var(--ar-ink) 22%, var(--ar-bg));
+}
+
+.annual-report .ar-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.annual-report .ar-table th {
+  text-align: left;
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ar-muted);
+  border-bottom: 1px solid color-mix(in oklab, var(--ar-ink) 30%, transparent);
+  padding-bottom: 0.35rem;
+}
+
+.annual-report .ar-table td {
+  border-bottom: 1px solid color-mix(in oklab, var(--ar-ink) 12%, transparent);
+  padding: 0.38rem 0;
+  font-size: 0.86rem;
+}
+
+.annual-report .ar-right {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+  .annual-report .ar-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
 }

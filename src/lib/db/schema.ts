@@ -1,16 +1,74 @@
 export const schemaSql = `
 PRAGMA journal_mode=WAL;
 
+CREATE TABLE IF NOT EXISTS tenants (
+  id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  display_name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS memberships (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('owner','admin','editor','viewer')),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(tenant_id, user_id),
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS invitations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('owner','admin','editor','viewer')),
+  invited_by_user_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','revoked')),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(tenant_id, email, status),
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(invited_by_user_id) REFERENCES users(id)
+);
+
 CREATE TABLE IF NOT EXISTS imports (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL DEFAULT 'harris_holdings',
   filename TEXT NOT NULL,
   imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   row_count INTEGER NOT NULL,
-  file_hash TEXT NOT NULL UNIQUE
+  file_hash TEXT NOT NULL,
+  UNIQUE(tenant_id, file_hash)
+);
+
+CREATE TABLE IF NOT EXISTS import_jobs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  filename TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('queued','running','completed','failed')) DEFAULT 'queued',
+  payload_json TEXT NOT NULL,
+  inserted_count INTEGER NOT NULL DEFAULT 0,
+  skipped_count INTEGER NOT NULL DEFAULT 0,
+  duplicates_count INTEGER NOT NULL DEFAULT 0,
+  vendor_updates_count INTEGER NOT NULL DEFAULT 0,
+  error_message TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  started_at TEXT,
+  completed_at TEXT,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id)
 );
 
 CREATE TABLE IF NOT EXISTS vendor_rules (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL DEFAULT 'harris_holdings',
   match_type TEXT NOT NULL CHECK (match_type IN ('exact','contains','regex')),
   match_value TEXT NOT NULL,
   entity TEXT NOT NULL CHECK (entity IN ('chris','kate','big_picture')),
@@ -23,6 +81,7 @@ CREATE TABLE IF NOT EXISTS vendor_rules (
 
 CREATE TABLE IF NOT EXISTS transactions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL DEFAULT 'harris_holdings',
   date TEXT NOT NULL,
   vendor TEXT NOT NULL,
   amount REAL NOT NULL,
@@ -40,16 +99,354 @@ CREATE TABLE IF NOT EXISTS transactions (
 
 CREATE TABLE IF NOT EXISTS deductions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL DEFAULT 'harris_holdings',
   entity TEXT NOT NULL CHECK (entity IN ('chris','kate','big_picture')),
   type TEXT NOT NULL CHECK (type IN ('home_office','mileage','phone','equipment')),
   payload_json TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(entity, type)
+  UNIQUE(tenant_id, entity, type)
+);
+
+CREATE TABLE IF NOT EXISTS family_members (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  relation TEXT NOT NULL,
+  birth_date TEXT,
+  notes TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+);
+
+CREATE TABLE IF NOT EXISTS health_symptom_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  member_id INTEGER,
+  occurred_on TEXT NOT NULL,
+  symptom TEXT NOT NULL,
+  severity INTEGER NOT NULL CHECK (severity BETWEEN 1 AND 5),
+  duration_hours REAL NOT NULL DEFAULT 0,
+  trigger TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(member_id) REFERENCES family_members(id)
+);
+
+CREATE TABLE IF NOT EXISTS health_sick_days (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  member_id INTEGER NOT NULL,
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  fever INTEGER NOT NULL DEFAULT 0,
+  school_work_missed INTEGER NOT NULL DEFAULT 1,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(member_id) REFERENCES family_members(id)
+);
+
+CREATE TABLE IF NOT EXISTS health_allergies (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  member_id INTEGER NOT NULL,
+  allergen TEXT NOT NULL,
+  reaction TEXT NOT NULL,
+  severity INTEGER NOT NULL CHECK (severity BETWEEN 1 AND 5),
+  has_epinephrine INTEGER NOT NULL DEFAULT 0,
+  notes TEXT,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(member_id) REFERENCES family_members(id)
+);
+
+CREATE TABLE IF NOT EXISTS health_medications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  member_id INTEGER NOT NULL,
+  medication_name TEXT NOT NULL,
+  dosage TEXT NOT NULL,
+  frequency TEXT NOT NULL,
+  start_date TEXT NOT NULL,
+  end_date TEXT,
+  prescribed_by TEXT,
+  notes TEXT,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(member_id) REFERENCES family_members(id)
+);
+
+CREATE TABLE IF NOT EXISTS health_appointments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  member_id INTEGER NOT NULL,
+  appointment_date TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  appointment_type TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('scheduled','completed','cancelled')) DEFAULT 'scheduled',
+  follow_up_date TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(member_id) REFERENCES family_members(id)
+);
+
+CREATE TABLE IF NOT EXISTS children_profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  member_id INTEGER NOT NULL,
+  school_name TEXT,
+  grade_level TEXT,
+  learning_style TEXT,
+  strengths TEXT,
+  support_needs TEXT,
+  long_term_focus TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(tenant_id, member_id),
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(member_id) REFERENCES family_members(id)
+);
+
+CREATE TABLE IF NOT EXISTS children_checkins (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  member_id INTEGER NOT NULL,
+  checkin_date TEXT NOT NULL,
+  mood INTEGER NOT NULL CHECK (mood BETWEEN 1 AND 5),
+  sleep_hours REAL NOT NULL DEFAULT 0,
+  reading_minutes INTEGER NOT NULL DEFAULT 0,
+  movement_minutes INTEGER NOT NULL DEFAULT 0,
+  screen_time_minutes INTEGER NOT NULL DEFAULT 0,
+  social_connection INTEGER NOT NULL DEFAULT 3 CHECK (social_connection BETWEEN 1 AND 5),
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(member_id) REFERENCES family_members(id)
+);
+
+CREATE TABLE IF NOT EXISTS children_goals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  member_id INTEGER NOT NULL,
+  domain TEXT NOT NULL,
+  goal_title TEXT NOT NULL,
+  target_date TEXT,
+  progress_pct INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','on_hold','completed')),
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(member_id) REFERENCES family_members(id)
+);
+
+CREATE TABLE IF NOT EXISTS children_milestones (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  member_id INTEGER NOT NULL,
+  milestone_date TEXT NOT NULL,
+  domain TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(member_id) REFERENCES family_members(id)
+);
+
+CREATE TABLE IF NOT EXISTS children_academics (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  member_id INTEGER NOT NULL,
+  recorded_on TEXT NOT NULL,
+  term TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  score TEXT,
+  teacher_note TEXT,
+  support_plan TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(member_id) REFERENCES family_members(id)
+);
+
+CREATE TABLE IF NOT EXISTS children_activities (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  member_id INTEGER NOT NULL,
+  activity_name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  schedule TEXT,
+  mentor_or_coach TEXT,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paused','completed')),
+  monthly_cost REAL NOT NULL DEFAULT 0,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(member_id) REFERENCES family_members(id)
+);
+
+CREATE TABLE IF NOT EXISTS children_support_contacts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  member_id INTEGER NOT NULL,
+  contact_name TEXT NOT NULL,
+  role TEXT NOT NULL,
+  organization TEXT,
+  phone TEXT,
+  email TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(member_id) REFERENCES family_members(id)
+);
+
+CREATE TABLE IF NOT EXISTS family_projects (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  owner_name TEXT,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','on_hold','completed')),
+  priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low','medium','high')),
+  due_date TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+);
+
+CREATE TABLE IF NOT EXISTS family_goals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  goal_title TEXT NOT NULL,
+  domain TEXT NOT NULL,
+  target_date TEXT,
+  progress_pct INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','on_hold','completed')),
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+);
+
+CREATE TABLE IF NOT EXISTS family_trips (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  trip_name TEXT NOT NULL,
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  destination TEXT,
+  budget_amount REAL NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','booked','in_progress','completed','cancelled')),
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+);
+
+CREATE TABLE IF NOT EXISTS family_trip_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  trip_id INTEGER NOT NULL,
+  item_name TEXT NOT NULL,
+  category TEXT,
+  qty INTEGER NOT NULL DEFAULT 1,
+  packed INTEGER NOT NULL DEFAULT 0,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(trip_id) REFERENCES family_trips(id)
+);
+
+CREATE TABLE IF NOT EXISTS home_grocery_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  item_name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  quantity REAL NOT NULL DEFAULT 1,
+  unit TEXT,
+  needed INTEGER NOT NULL DEFAULT 1,
+  last_purchased_on TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+);
+
+CREATE TABLE IF NOT EXISTS income_receipts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  received_date TEXT NOT NULL,
+  source_type TEXT NOT NULL CHECK (source_type IN ('client_payment','gift','unemployment','food_stamps','other')),
+  payer_name TEXT NOT NULL,
+  project_name TEXT,
+  gross_amount REAL NOT NULL CHECK (gross_amount >= 0),
+  notes TEXT,
+  import_hash TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+);
+
+CREATE TABLE IF NOT EXISTS income_splits (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  income_receipt_id INTEGER NOT NULL,
+  entity TEXT NOT NULL CHECK (entity IN ('chris','kate','big_picture')),
+  split_percent REAL NOT NULL CHECK (split_percent >= 0 AND split_percent <= 100),
+  split_amount REAL NOT NULL CHECK (split_amount >= 0),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(income_receipt_id) REFERENCES income_receipts(id)
+);
+
+CREATE TABLE IF NOT EXISTS family_milestones (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  member_name TEXT,
+  milestone_date TEXT NOT NULL,
+  area TEXT NOT NULL,
+  title TEXT NOT NULL,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_transactions_entity ON transactions(entity);
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_vendor ON transactions(vendor);
 CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);
+CREATE INDEX IF NOT EXISTS idx_transactions_tenant ON transactions(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_rules_tenant ON vendor_rules(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_imports_tenant ON imports(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_import_jobs_tenant_status ON import_jobs(tenant_id, status);
+CREATE INDEX IF NOT EXISTS idx_deductions_tenant ON deductions(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_invitations_tenant ON invitations(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_family_members_tenant ON family_members(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_health_symptoms_tenant ON health_symptom_logs(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_health_sick_days_tenant ON health_sick_days(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_health_allergies_tenant ON health_allergies(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_health_meds_tenant ON health_medications(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_health_appts_tenant ON health_appointments(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_children_profiles_tenant ON children_profiles(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_children_checkins_tenant ON children_checkins(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_children_goals_tenant ON children_goals(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_children_milestones_tenant ON children_milestones(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_children_academics_tenant ON children_academics(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_children_activities_tenant ON children_activities(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_children_contacts_tenant ON children_support_contacts(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_family_projects_tenant ON family_projects(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_family_goals_tenant ON family_goals(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_family_trips_tenant ON family_trips(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_family_trip_items_tenant ON family_trip_items(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_home_grocery_items_tenant ON home_grocery_items(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_income_receipts_tenant_date ON income_receipts(tenant_id, received_date);
+CREATE INDEX IF NOT EXISTS idx_income_receipts_tenant_source ON income_receipts(tenant_id, source_type);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_income_receipts_tenant_import_hash ON income_receipts(tenant_id, import_hash);
+CREATE INDEX IF NOT EXISTS idx_income_splits_tenant_receipt ON income_splits(tenant_id, income_receipt_id);
+CREATE INDEX IF NOT EXISTS idx_income_splits_tenant_entity ON income_splits(tenant_id, entity);
+CREATE INDEX IF NOT EXISTS idx_family_milestones_tenant ON family_milestones(tenant_id);
 `;

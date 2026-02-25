@@ -2,26 +2,34 @@
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import BarSpark from '@/components/BarSpark.astro';
 import { getCategoryDistribution, getImportAuditMeta, getKpisByEntity, getMonthlyStacked, getSystemCounts, getTopVendors } from '@/lib/services/reports';
+import { getIncomeOverview } from '@/lib/services/income';
 import { formatCurrency, formatMonthLabel } from '@/lib/utils/format';
 import { databaseUrl } from '@/lib/db/connection';
+import { normalizeReportYear } from '@/lib/utils/year';
 
-const kpis = await getKpisByEntity();
-const monthly = await getMonthlyStacked();
-const categoryDist = await getCategoryDistribution();
-const vendors = await getTopVendors(undefined, 10);
-const meta = await getImportAuditMeta();
-const counts = await getSystemCounts();
-const monthlyTotals = monthly.map((m) => m.chris + m.kate + m.big_picture);
 const params = Astro.url.searchParams;
+const selectedYear = normalizeReportYear(params.get('year'));
+const tenantId = Astro.locals.tenantId;
+const kpis = await getKpisByEntity(tenantId, selectedYear);
+const monthly = await getMonthlyStacked(tenantId, selectedYear);
+const categoryDist = await getCategoryDistribution(tenantId, undefined, selectedYear);
+const vendors = await getTopVendors(tenantId, undefined, 10, selectedYear);
+const income = await getIncomeOverview(tenantId, selectedYear);
+const meta = await getImportAuditMeta(tenantId, selectedYear);
+const counts = await getSystemCounts(tenantId, selectedYear);
+const monthlyTotals = monthly.map((m) => m.chris + m.kate + m.big_picture);
+const totalSpend = kpis.reduce((sum, kpi) => sum + kpi.totalSpend, 0);
+const netAfterSpend = income.stats.totalIncome - totalSpend;
 const imported = params.get('imported') === '1';
 const alreadyImported = params.get('alreadyImported') === '1';
+const vendorUpdates = Number(params.get('vendorUpdates') ?? '0');
 ---
 
 <BaseLayout title="Operating Report" subtitle="A living annual report for Chris, Kate, and Big Picture.">
   {imported && (
     <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">
       {alreadyImported
-        ? `This file was already imported on ${params.get('existingImportedAt') ?? 'an earlier run'} (rows: ${params.get('existingRows') ?? 'n/a'}).`
+        ? `This file was already imported on ${params.get('existingImportedAt') ?? 'an earlier run'} (rows: ${params.get('existingRows') ?? 'n/a'}). Custom Name vendor updates applied: ${vendorUpdates}.`
         : `Import completed. Inserted: ${params.get('inserted') ?? '0'} | Skipped: ${params.get('skipped') ?? '0'} | Duplicates flagged: ${params.get('duplicates') ?? '0'}`}
     </div>
   )}
@@ -68,16 +76,21 @@ const alreadyImported = params.get('alreadyImported') === '1';
     <article class="panel">
       <h2 class="panel-title">Import Data Source</h2>
       <form method="post" action="/api/import" enctype="multipart/form-data" class="mt-3 space-y-2">
+        <input type="hidden" name="year" value={selectedYear} />
+        <input type="hidden" name="mode" value="background" />
         <input type="file" name="file" accept=".csv" required class="w-full text-sm" />
-        <button type="submit" class="w-full border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Import Transaction CSV</button>
+        <button type="submit" class="w-full border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Queue Import (Background)</button>
       </form>
+      <a href={`/imports?year=${selectedYear}`} class="mt-2 inline-block border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">
+        Open Imports Queue
+      </a>
       <dl class="mt-4 space-y-1 text-xs">
         <div class="flex justify-between"><dt>Data source</dt><dd>{meta.latestImport?.filename ?? 'No import yet'}</dd></div>
         <div class="flex justify-between"><dt>Imported at</dt><dd>{meta.latestImport?.imported_at ?? 'n/a'}</dd></div>
         <div class="flex justify-between"><dt>Rows</dt><dd class="mono-num">{meta.latestImport?.row_count ?? 0}</dd></div>
         <div class="flex justify-between"><dt>Imports table rows</dt><dd class="mono-num">{counts.imports}</dd></div>
-        <div class="flex justify-between"><dt>Transaction rows</dt><dd class="mono-num">{counts.transactions}</dd></div>
-        <div class="flex justify-between"><dt>Refund totals</dt><dd class="mono-num">{formatCurrency(meta.refundTotals)}</dd></div>
+        <div class="flex justify-between"><dt>Transaction rows ({selectedYear})</dt><dd class="mono-num">{counts.transactions}</dd></div>
+        <div class="flex justify-between"><dt>Refund totals ({selectedYear})</dt><dd class="mono-num">{formatCurrency(meta.refundTotals)}</dd></div>
       </dl>
       <p class="mt-4 text-xs text-muted">Refunds excluded from burn rate.</p>
       <p class="text-xs text-muted">Business use: 32.7% of total home (set in Deductions).</p>
@@ -85,7 +98,22 @@ const alreadyImported = params.get('alreadyImported') === '1';
     </article>
   </section>
 
-  <section class="mt-4 grid gap-4 lg:grid-cols-2">
+  <section class="mt-4 grid gap-4 lg:grid-cols-3">
+    <article class="panel">
+      <h2 class="panel-title">Income Snapshot</h2>
+      <dl class="mt-3 space-y-1 text-xs">
+        <div class="flex justify-between"><dt>Total Income ({selectedYear})</dt><dd class="mono-num">{formatCurrency(income.stats.totalIncome)}</dd></div>
+        <div class="flex justify-between"><dt>Chris</dt><dd class="mono-num">{formatCurrency(income.stats.chrisIncome)}</dd></div>
+        <div class="flex justify-between"><dt>Kate</dt><dd class="mono-num">{formatCurrency(income.stats.kateIncome)}</dd></div>
+        <div class="flex justify-between"><dt>Big Picture</dt><dd class="mono-num">{formatCurrency(income.stats.bigPictureIncome)}</dd></div>
+        <div class="flex justify-between"><dt>Other Sources</dt><dd class="mono-num">{formatCurrency(income.stats.otherSourceIncome)}</dd></div>
+        <div class="flex justify-between"><dt>Net After Spend</dt><dd class:list={['mono-num', netAfterSpend < 0 ? 'text-red-700' : 'text-emerald-700']}>{formatCurrency(netAfterSpend)}</dd></div>
+      </dl>
+      <a href={`/income?year=${selectedYear}`} class="mt-4 inline-block border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">
+        Open Income Workspace
+      </a>
+    </article>
+
     <article class="panel">
       <h2 class="panel-title">Category Distribution</h2>
       <table class="table-report mt-3 w-full">
@@ -120,9 +148,10 @@ const alreadyImported = params.get('alreadyImported') === '1';
   <footer class="mt-6 border-t border-grid pt-4 text-xs text-muted">
     <p>Gross vs Net shown as spend minus refunds. Data source timestamp from latest import.</p>
     <div class="mt-2 flex flex-wrap gap-2">
-      <a href="/api/exports/meals-summary.csv" class="border border-grid px-2 py-1">Meals (50%) Summary</a>
-      <a href="/api/exports/contract-labor-600.csv" class="border border-grid px-2 py-1">Contract Labor &gt; $600</a>
-      <a href="/api/exports/category-breakdown.csv" class="border border-grid px-2 py-1">Annual Category Breakdown</a>
+      <a href={`/annual-report?year=${selectedYear}`} class="border border-grid px-2 py-1">Annual Report (All Years)</a>
+      <a href={`/api/exports/meals-summary.csv?year=${selectedYear}`} class="border border-grid px-2 py-1">Meals (50%) Summary</a>
+      <a href={`/api/exports/contract-labor-600.csv?year=${selectedYear}`} class="border border-grid px-2 py-1">Contract Labor &gt; $600</a>
+      <a href={`/api/exports/category-breakdown.csv?year=${selectedYear}`} class="border border-grid px-2 py-1">Annual Category Breakdown</a>
     </div>
   </footer>
 </BaseLayout>

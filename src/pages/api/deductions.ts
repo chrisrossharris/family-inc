@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { z } from 'zod';
 import { upsertDeduction } from '@/lib/services/deductions';
+import { resolveSession } from '@/lib/auth/session';
 
 const bodySchema = z.object({
   entity: z.enum(['chris', 'kate', 'big_picture']),
@@ -8,7 +9,7 @@ const bodySchema = z.object({
   payload_json: z.string().min(2)
 });
 
-export const POST: APIRoute = async ({ request }) => {
+export const POST: APIRoute = async ({ request, locals, cookies }) => {
   const form = await request.formData();
   const parsed = bodySchema.safeParse(Object.fromEntries(form.entries()));
 
@@ -23,7 +24,8 @@ export const POST: APIRoute = async ({ request }) => {
     return new Response(JSON.stringify({ error: 'payload_json must be valid JSON' }), { status: 400 });
   }
 
-  await upsertDeduction(parsed.data.entity, parsed.data.type, payload);
+  const session = resolveSession(locals, cookies);
+  await upsertDeduction(session.tenantId, parsed.data.entity, parsed.data.type, payload);
 
   return new Response(JSON.stringify({ ok: true }), {
     headers: { 'content-type': 'application/json' }

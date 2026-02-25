@@ -6,11 +6,12 @@ import { formatCurrency } from '@/lib/utils/format';
 import type { Entity } from '@/lib/types';
 
 const entities = Object.keys(ENTITY_LABELS) as Entity[];
-const records = await getDeductions();
+const tenantId = Astro.locals.tenantId;
+const records = await getDeductions(tenantId);
 const totalsByEntity = new Map<Entity, number>();
 
 for (const entity of entities) {
-  totalsByEntity.set(entity, await calculateDeductionTotals(entity));
+  totalsByEntity.set(entity, await calculateDeductionTotals(tenantId, entity));
 }
 ---
 

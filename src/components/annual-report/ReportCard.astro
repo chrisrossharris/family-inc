@@ -1,0 +1,16 @@
+---
+import SectionRule from './SectionRule.astro';
+
+interface Props {
+  class?: string;
+  kicker?: string;
+  showRule?: boolean;
+}
+
+const { class: className, kicker, showRule = true } = Astro.props as Props;
+---
+
+<article class:list={['ar-card', className]}>
+  {showRule ? <SectionRule kicker={kicker} /> : kicker ? <p class="ar-kicker">{kicker}</p> : null}
+  <slot />
+</article>

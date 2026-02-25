@@ -1,0 +1,42 @@
+---
+export interface LeaderboardRow {
+  label: string;
+  value: string | number;
+}
+
+interface Props {
+  title?: string;
+  rows: LeaderboardRow[];
+  labelHeader?: string;
+  valueHeader?: string;
+  class?: string;
+}
+
+const {
+  title,
+  rows,
+  labelHeader = 'Item',
+  valueHeader = 'Value',
+  class: className
+} = Astro.props as Props;
+---
+
+<div class:list={className ? [className] : []}>
+  {title && <p class="ar-kicker">{title}</p>}
+  <table class="ar-table mt-2">
+    <thead>
+      <tr>
+        <th>{labelHeader}</th>
+        <th class="ar-right">{valueHeader}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows.map((row) => (
+        <tr>
+          <td>{row.label}</td>
+          <td class="ar-right">{row.value}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>

@@ -1,0 +1,170 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { getIncomeOverview } from '@/lib/services/income';
+import { formatCurrency, formatPercent } from '@/lib/utils/format';
+import { normalizeReportYear } from '@/lib/utils/year';
+
+const tenantId = Astro.locals.tenantId;
+const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
+const saved = Astro.url.searchParams.get('saved');
+const updated = Number(Astro.url.searchParams.get('updated') ?? '0');
+const invalid = Number(Astro.url.searchParams.get('invalid') ?? '0');
+const importedIncome = Astro.url.searchParams.get('importedIncome') === '1';
+const insertedIncome = Number(Astro.url.searchParams.get('insertedIncome') ?? '0');
+const skippedIncome = Number(Astro.url.searchParams.get('skippedIncome') ?? '0');
+const invalidIncome = Number(Astro.url.searchParams.get('invalidIncome') ?? '0');
+const overview = await getIncomeOverview(tenantId, selectedYear);
+---
+
+<BaseLayout title="Income" subtitle="Track earned income and support sources with clear split allocations by entity.">
+  {saved && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Saved: {saved}</div>}
+  {importedIncome && (
+    <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">
+      Income import completed. Inserted: {insertedIncome} | Skipped: {skippedIncome} | Invalid: {invalidIncome}
+    </div>
+  )}
+  {updated > 0 && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Updated {updated} income row{updated === 1 ? '' : 's'}.</div>}
+  {invalid > 0 && <div class="mb-4 border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Skipped {invalid} row{invalid === 1 ? '' : 's'} due to invalid values (split must be &gt; 0 and ≤ 100, gross &gt; 0).</div>}
+
+  <section class="grid gap-4 md:grid-cols-4 lg:grid-cols-9">
+    <article class="panel"><p class="panel-title">Total Income</p><p class="mono-num mt-2 text-2xl">{formatCurrency(overview.stats.totalIncome)}</p></article>
+    <article class="panel"><p class="panel-title">Chris Income</p><p class="mono-num mt-2 text-2xl">{formatCurrency(overview.stats.chrisIncome)}</p></article>
+    <article class="panel"><p class="panel-title">Kate Income</p><p class="mono-num mt-2 text-2xl">{formatCurrency(overview.stats.kateIncome)}</p></article>
+    <article class="panel"><p class="panel-title">Big Picture Income</p><p class="mono-num mt-2 text-2xl">{formatCurrency(overview.stats.bigPictureIncome)}</p></article>
+    <article class="panel"><p class="panel-title">Allocation Rate</p><p class="mono-num mt-2 text-2xl">{formatPercent(overview.stats.allocationRate)}</p></article>
+    <article class="panel"><p class="panel-title">Other Sources</p><p class="mono-num mt-2 text-2xl">{formatCurrency(overview.stats.otherSourceIncome)}</p></article>
+    <article class="panel"><p class="panel-title">Unallocated</p><p class="mono-num mt-2 text-2xl">{formatCurrency(overview.stats.unallocatedIncome)}</p></article>
+    <article class="panel"><p class="panel-title">Top Client</p><p class="mt-2 truncate text-sm">{overview.stats.topClientName ?? '—'}</p><p class="mono-num text-xs">{formatCurrency(overview.stats.topClientTotal)}</p></article>
+    <article class="panel"><p class="panel-title">Top Client Share</p><p class="mono-num mt-2 text-2xl">{formatPercent(overview.stats.topClientShare)}</p></article>
+    <article class="panel"><p class="panel-title">Receipts</p><p class="mono-num mt-2 text-2xl">{overview.stats.receiptsCount}</p></article>
+  </section>
+
+  <section class="mt-4 grid gap-4 lg:grid-cols-2">
+    <article class="panel">
+      <h2 class="panel-title">Add Income Receipt</h2>
+      <p class="mt-2 text-xs text-muted">Use source type for non-client income (gift, unemployment, food stamps). Splits can total up to 100%.</p>
+      <details class="form-card mt-3" open={overview.receipts.length === 0}>
+        <summary>New Receipt</summary>
+        <form method="post" action="/api/income/receipt" class="mt-3 grid gap-2 md:grid-cols-2">
+          <input type="hidden" name="year" value={selectedYear} />
+          <input type="date" name="received_date" required />
+          <input type="number" name="gross_amount" min="0.01" step="0.01" required placeholder="Gross amount" />
+          <select name="source_type" required>
+            <option value="client_payment" selected>Client Payment</option>
+            <option value="gift">Gift</option>
+            <option value="unemployment">Unemployment</option>
+            <option value="food_stamps">Food Stamps</option>
+            <option value="other">Other</option>
+          </select>
+          <input type="text" name="payer_name" required placeholder="Client / source name" />
+          <input type="text" name="project_name" placeholder="Project (optional)" class="md:col-span-2" />
+          <div class="md:col-span-2 border border-grid p-2">
+            <p class="panel-title">Split Allocation %</p>
+            <div class="mt-2 grid gap-2 md:grid-cols-3">
+              <input type="number" name="split_chris" min="0" max="100" step="0.1" value="0" placeholder="Chris %" />
+              <input type="number" name="split_kate" min="0" max="100" step="0.1" value="0" placeholder="Kate %" />
+              <input type="number" name="split_big_picture" min="0" max="100" step="0.1" value="100" placeholder="Big Picture %" />
+            </div>
+            <p class="mt-2 text-[10px] text-muted">Example: Elephant Wines $2500 with 50% to Big Picture = Big Picture 50, others 0.</p>
+          </div>
+          <textarea name="notes" rows="2" class="md:col-span-2" placeholder="Notes"></textarea>
+          <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Income</button>
+        </form>
+      </details>
+    </article>
+
+    <article class="panel">
+      <h2 class="panel-title">Import Income CSV</h2>
+      <p class="mt-2 text-xs text-muted">Accepted columns include: Date, Source Type, Payer/Client, Project, Gross Amount, split percentages.</p>
+      <form method="post" action="/api/income/import" enctype="multipart/form-data" class="mt-3 space-y-2">
+        <input type="hidden" name="year" value={selectedYear} />
+        <input type="file" name="file" accept=".csv" required class="w-full text-sm" />
+        <button type="submit" class="w-full border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Import Income CSV</button>
+      </form>
+      <p class="mt-2 text-[10px] text-muted">Default split is Big Picture 100% if no split columns are provided.</p>
+
+      <h2 class="panel-title mt-5">Income Sources</h2>
+      <table class="table-report mt-3 w-full">
+        <thead><tr><th>Source</th><th class="text-right">Receipts</th><th class="text-right">Share</th><th class="text-right">Total</th></tr></thead>
+        <tbody>
+          {overview.sourceTotals.length === 0 && <tr><td colspan="4" class="text-xs text-muted">No income sources yet.</td></tr>}
+          {overview.sourceTotals.map((row) => (
+            <tr>
+              <td>{row.label}</td>
+              <td class="mono-num">{row.count}</td>
+              <td class="mono-num">{overview.stats.totalIncome > 0 ? formatPercent(row.total / overview.stats.totalIncome) : '0.0%'}</td>
+              <td class="mono-num">{formatCurrency(row.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <h3 class="panel-title mt-5">Paid Clients & Projects</h3>
+      <table class="table-report mt-3 w-full">
+        <thead><tr><th>Client</th><th>Project</th><th class="text-right">Total Paid</th></tr></thead>
+        <tbody>
+          {overview.clientProjectPaid.length === 0 && <tr><td colspan="3" class="text-xs text-muted">No client payments yet.</td></tr>}
+          {overview.clientProjectPaid.map((row) => (
+            <tr>
+              <td>{row.client}</td>
+              <td>{row.project ?? '—'}</td>
+              <td class="mono-num">{formatCurrency(row.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </article>
+  </section>
+
+  <section class="panel mt-4 overflow-x-auto">
+    <h2 class="panel-title">Income Ledger</h2>
+    <form method="post" action="/api/income/grid-update">
+      <input type="hidden" name="ids" value={overview.receipts.map((row) => row.id).join(',')} />
+      <p class="mb-2 text-[10px] uppercase tracking-report text-muted">Edit multiple rows, then press Enter in any field to save all.</p>
+      <table class="table-report mt-3 w-full min-w-[1480px]">
+        <thead>
+          <tr>
+            <th>Date</th><th>Source</th><th>Client / Source</th><th>Project</th><th class="text-right">Gross</th>
+            <th class="text-right">Chris %</th><th class="text-right">Kate %</th><th class="text-right">Big Picture %</th><th class="text-right">Split Total</th><th>Allocation</th><th class="text-right">Unallocated</th>
+          </tr>
+        </thead>
+        <tbody>
+          {overview.receipts.length === 0 && <tr><td colspan="11" class="text-xs text-muted">No income receipts yet. Add your first payment above.</td></tr>}
+          {overview.receipts.map((row) => (
+            <tr>
+              <td><input type="date" name={`received_date_${row.id}`} value={row.received_date} class="text-xs" /></td>
+              <td>
+                <select name={`source_type_${row.id}`} class="text-xs">
+                  <option value="client_payment" selected={row.source_type === 'client_payment'}>Client Payment</option>
+                  <option value="gift" selected={row.source_type === 'gift'}>Gift</option>
+                  <option value="unemployment" selected={row.source_type === 'unemployment'}>Unemployment</option>
+                  <option value="food_stamps" selected={row.source_type === 'food_stamps'}>Food Stamps</option>
+                  <option value="other" selected={row.source_type === 'other'}>Other</option>
+                </select>
+              </td>
+              <td><input type="text" name={`payer_name_${row.id}`} value={row.payer_name} class="text-xs" /></td>
+              <td><input type="text" name={`project_name_${row.id}`} value={row.project_name ?? ''} class="text-xs" /></td>
+              <td><input type="number" name={`gross_amount_${row.id}`} min="0.01" step="0.01" value={row.gross_amount.toFixed(2)} class="mono-num w-24 text-right text-xs" /></td>
+              <td><input type="number" name={`split_chris_${row.id}`} min="0" max="100" step="0.1" value={row.split_chris.toFixed(1)} class="mono-num w-16 text-right text-xs" /></td>
+              <td><input type="number" name={`split_kate_${row.id}`} min="0" max="100" step="0.1" value={row.split_kate.toFixed(1)} class="mono-num w-16 text-right text-xs" /></td>
+              <td><input type="number" name={`split_big_picture_${row.id}`} min="0" max="100" step="0.1" value={row.split_big_picture.toFixed(1)} class="mono-num w-20 text-right text-xs" /></td>
+              <td class:list={['mono-num', row.split_total_pct > 100 || row.split_total_pct <= 0 ? 'text-amber-900' : undefined]}>{row.split_total_pct.toFixed(1)}%</td>
+              <td class="text-xs">{row.splitSummary}</td>
+              <td class:list={['mono-num', row.unallocatedAmount > 0 ? 'text-amber-900' : undefined]}>{formatCurrency(row.unallocatedAmount)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <button type="submit" class="sr-only">Save income ledger edits</button>
+    </form>
+  </section>
+
+  <footer class="mt-6 border-t border-grid pt-4 text-xs text-muted">
+    <p>CPA/shareable exports for {selectedYear}:</p>
+    <div class="mt-2 flex flex-wrap gap-2">
+      <a href={`/api/exports/income-ledger.csv?year=${selectedYear}`} class="border border-grid px-2 py-1 hover:bg-ink hover:text-paper">Income Ledger CSV</a>
+      <a href={`/api/exports/income-by-client-project.csv?year=${selectedYear}`} class="border border-grid px-2 py-1 hover:bg-ink hover:text-paper">Income by Client/Project CSV</a>
+      <a href={`/api/exports/income-by-source.csv?year=${selectedYear}`} class="border border-grid px-2 py-1 hover:bg-ink hover:text-paper">Income by Source CSV</a>
+    </div>
+  </footer>
+</BaseLayout>

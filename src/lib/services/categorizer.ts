@@ -34,14 +34,15 @@ function matchesRule(rule: VendorRule, vendor: string): boolean {
   }
 }
 
-export async function getOrderedVendorRules(): Promise<VendorRule[]> {
+export async function getOrderedVendorRules(tenantId: string): Promise<VendorRule[]> {
   return db.all<VendorRule>(
-    "SELECT * FROM vendor_rules ORDER BY CASE match_type WHEN 'exact' THEN 1 WHEN 'contains' THEN 2 ELSE 3 END, LENGTH(match_value) DESC"
+    "SELECT * FROM vendor_rules WHERE tenant_id = ? ORDER BY CASE match_type WHEN 'exact' THEN 1 WHEN 'contains' THEN 2 ELSE 3 END, LENGTH(match_value) DESC",
+    [tenantId]
   );
 }
 
-export async function categorizeTransaction(input: CategorizeInput, rules?: VendorRule[]): Promise<CategorizeResult> {
-  const activeRules = rules ?? (await getOrderedVendorRules());
+export async function categorizeTransaction(tenantId: string, input: CategorizeInput, rules?: VendorRule[]): Promise<CategorizeResult> {
+  const activeRules = rules ?? (await getOrderedVendorRules(tenantId));
   const match = activeRules.find((rule) => matchesRule(rule, input.vendor) || matchesRule(rule, input.description));
 
   if (match) {
@@ -66,19 +67,22 @@ export async function categorizeTransaction(input: CategorizeInput, rules?: Vend
   };
 }
 
-export async function applyRuleRetroactively(ruleId: number): Promise<number> {
-  const rule = await db.get<VendorRule>('SELECT * FROM vendor_rules WHERE id = ?', [ruleId]);
+export async function applyRuleRetroactively(tenantId: string, ruleId: number): Promise<number> {
+  const rule = await db.get<VendorRule>('SELECT * FROM vendor_rules WHERE tenant_id = ? AND id = ?', [tenantId, ruleId]);
   if (!rule) return 0;
 
-  const txns = await db.all<{ id: number; vendor: string; description: string }>('SELECT id, vendor, description FROM transactions');
+  const txns = await db.all<{ id: number; vendor: string; description: string }>(
+    'SELECT id, vendor, description FROM transactions WHERE tenant_id = ?',
+    [tenantId]
+  );
 
   let count = 0;
   await db.transaction(async (tx) => {
     for (const row of txns) {
       if (matchesRule(rule, row.vendor) || matchesRule(rule, row.description)) {
         await tx.run(
-          'UPDATE transactions SET entity = ?, category = ?, deductible_flag = ?, confidence = ?, rule_id = ? WHERE id = ?',
-          [rule.entity, rule.category, rule.deductible_flag, 'high', rule.id, row.id]
+          'UPDATE transactions SET entity = ?, category = ?, deductible_flag = ?, confidence = ?, rule_id = ? WHERE tenant_id = ? AND id = ?',
+          [rule.entity, rule.category, rule.deductible_flag, 'high', rule.id, tenantId, row.id]
         );
         count += 1;
       }

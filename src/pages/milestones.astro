@@ -1,0 +1,51 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { normalizeReportYear } from '@/lib/utils/year';
+import { getMilestonesOverview } from '@/lib/services/pillars';
+
+const tenantId = Astro.locals.tenantId;
+const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
+const saved = Astro.url.searchParams.get('saved');
+const overview = await getMilestonesOverview(tenantId, selectedYear);
+const recentMilestones = overview.milestones.slice(0, 5);
+---
+
+<BaseLayout title="Milestones" subtitle="Family timeline for key wins, growth moments, and major events.">
+  {saved && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Saved: {saved}</div>}
+
+  <section class="grid gap-4 md:grid-cols-4">
+    <article class="panel"><p class="panel-title">Total Milestones</p><p class="mono-num mt-2 text-2xl">{overview.stats.totalMilestones}</p></article>
+    <article class="panel"><p class="panel-title">Milestones {selectedYear}</p><p class="mono-num mt-2 text-2xl">{overview.stats.milestonesThisYear}</p></article>
+    <article class="panel"><p class="panel-title">Family-Level</p><p class="mono-num mt-2 text-2xl">{overview.stats.familyMilestones}</p></article>
+    <article class="panel"><p class="panel-title">Member-Specific</p><p class="mono-num mt-2 text-2xl">{overview.stats.memberMilestones}</p></article>
+  </section>
+
+  <section class="panel mt-4">
+    <h2 class="panel-title">Milestone Log</h2>
+    <p class="mt-2 text-xs text-muted">
+      {overview.milestones.length === 0
+        ? 'No milestones logged yet.'
+        : `Most recent: ${recentMilestones.length} entries shown first in timeline order.`}
+    </p>
+    <details class="form-card mt-3" open={overview.milestones.length === 0}>
+      <summary>Add Milestone</summary>
+      <form method="post" action="/api/pillars/milestone" class="mt-3 grid gap-2 md:grid-cols-2">
+        <input type="hidden" name="year" value={selectedYear} />
+        <input type="date" name="milestone_date" required />
+        <input type="text" name="member_name" placeholder="Member name (optional)" />
+        <input type="text" name="area" required placeholder="Area (health, school, home, finance)" />
+        <input type="text" name="title" required placeholder="Milestone title" class="md:col-span-2" />
+        <textarea name="notes" rows="2" class="md:col-span-2" placeholder="Notes"></textarea>
+        <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Milestone</button>
+      </form>
+    </details>
+
+    <table class="table-report mt-4 w-full">
+      <thead><tr><th>Date</th><th>Area</th><th>Title</th><th>Member</th></tr></thead>
+      <tbody>
+        {overview.milestones.length === 0 && <tr><td colspan="4" class="text-xs text-muted">No milestones yet. Capture school wins, health progress, and major family moments.</td></tr>}
+        {overview.milestones.map((row) => <tr><td>{row.milestone_date}</td><td>{row.area}</td><td>{row.title}</td><td>{row.member_name ?? 'Family'}</td></tr>)}
+      </tbody>
+    </table>
+  </section>
+</BaseLayout>

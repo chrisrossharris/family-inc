@@ -1,0 +1,16 @@
+---
+import { SignIn as ClerkSignIn } from '@clerk/astro/components';
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sign In | Family Inc</title>
+  </head>
+  <body class="min-h-screen bg-paper font-sans text-ink">
+    <main class="mx-auto flex min-h-screen max-w-7xl items-center justify-center px-4 py-8">
+      <ClerkSignIn path="/sign-in" routing="path" signUpUrl="/sign-up" />
+    </main>
+  </body>
+</html>

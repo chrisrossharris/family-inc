@@ -1,0 +1,102 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { normalizeReportYear } from '@/lib/utils/year';
+import { getTripsOverview } from '@/lib/services/pillars';
+
+const tenantId = Astro.locals.tenantId;
+const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
+const saved = Astro.url.searchParams.get('saved');
+const overview = await getTripsOverview(tenantId, selectedYear);
+const todayIso = new Date().toISOString().slice(0, 10);
+const upcomingTrips = overview.trips.filter((t) => t.end_date >= todayIso && t.status !== 'cancelled');
+const budgetTotal = overview.trips.reduce((acc, t) => acc + t.budget_amount, 0);
+const activeTrips = overview.trips.filter((t) => ['planned', 'booked', 'in_progress'].includes(t.status));
+const tripsMissingBudget = overview.trips.filter((t) => t.status !== 'cancelled' && t.budget_amount <= 0);
+const unpackedByTrip = overview.items.reduce<Record<string, number>>((acc, item) => {
+  if (!item.packed) acc[item.trip_name] = (acc[item.trip_name] ?? 0) + 1;
+  return acc;
+}, {});
+---
+
+<BaseLayout title="Trips" subtitle="Travel planning, budgets, and packing execution in one place.">
+  {saved && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Saved: {saved}</div>}
+
+  <section class="grid gap-4 md:grid-cols-4 lg:grid-cols-8">
+    <article class="panel"><p class="panel-title">Trips</p><p class="mono-num mt-2 text-2xl">{overview.stats.totalTrips}</p></article>
+    <article class="panel"><p class="panel-title">Trips {selectedYear}</p><p class="mono-num mt-2 text-2xl">{overview.stats.tripsThisYear}</p></article>
+    <article class="panel"><p class="panel-title">Planned / Booked</p><p class="mono-num mt-2 text-2xl">{overview.stats.plannedTrips}</p></article>
+    <article class="panel"><p class="panel-title">Upcoming / Active</p><p class="mono-num mt-2 text-2xl">{upcomingTrips.length}</p></article>
+    <article class="panel"><p class="panel-title">Budget Total</p><p class="mono-num mt-2 text-2xl">${budgetTotal.toFixed(0)}</p></article>
+    <article class="panel"><p class="panel-title">Packed Items</p><p class="mono-num mt-2 text-2xl">{overview.stats.packedItems}</p></article>
+    <article class="panel"><p class="panel-title">Unpacked Items</p><p class="mono-num mt-2 text-2xl">{overview.stats.unpackedItems}</p></article>
+    <article class="panel"><p class="panel-title">No Budget Set</p><p class="mono-num mt-2 text-2xl">{tripsMissingBudget.length}</p></article>
+  </section>
+
+  <section class="mt-4 grid gap-4 lg:grid-cols-2">
+    <article class="panel">
+      <h2 class="panel-title">Trips</h2>
+      <p class="mt-2 text-xs text-muted">{overview.trips.length === 0 ? 'No trips yet. Add a trip first.' : `${activeTrips.length} active trip${activeTrips.length === 1 ? '' : 's'} on the board.`}</p>
+      <details class="form-card mt-3" open={overview.trips.length === 0}>
+        <summary>Add Trip</summary>
+        <form method="post" action="/api/pillars/trip" class="mt-3 grid gap-2 md:grid-cols-2">
+          <input type="hidden" name="year" value={selectedYear} />
+          <input type="text" name="trip_name" required placeholder="Trip name" class="md:col-span-2" />
+          <input type="date" name="start_date" required />
+          <input type="date" name="end_date" required />
+          <input type="text" name="destination" placeholder="Destination" />
+          <input type="number" step="0.01" min="0" name="budget_amount" placeholder="Budget" />
+          <select name="status"><option value="planned">Planned</option><option value="booked">Booked</option><option value="in_progress">In Progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select>
+          <textarea name="notes" rows="2" class="md:col-span-2" placeholder="Notes"></textarea>
+          <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Trip</button>
+        </form>
+      </details>
+      <table class="table-report mt-4 w-full">
+        <thead><tr><th>Trip</th><th>Destination</th><th>Dates</th><th>Status</th><th class="text-right">Budget</th><th class="text-right">Open Items</th></tr></thead>
+        <tbody>
+          {overview.trips.length === 0 && <tr><td colspan="6" class="text-xs text-muted">No trips yet. Add first trip above.</td></tr>}
+          {overview.trips.map((row) => (
+            <tr>
+              <td>{row.trip_name}</td>
+              <td>{row.destination ?? '—'}</td>
+              <td class="font-mono text-xs">{row.start_date} → {row.end_date}</td>
+              <td>{row.status}</td>
+              <td class:list={['mono-num', row.budget_amount <= 0 ? 'text-amber-900' : undefined]}>{row.budget_amount > 0 ? `$${row.budget_amount.toFixed(0)}` : 'Set budget'}</td>
+              <td class:list={['mono-num', (unpackedByTrip[row.trip_name] ?? 0) > 0 ? 'text-amber-900' : undefined]}>{unpackedByTrip[row.trip_name] ?? 0}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </article>
+
+    <article class="panel">
+      <h2 class="panel-title">Packing List</h2>
+      <p class="mt-2 text-xs text-muted">{overview.trips.length === 0 ? 'Create a trip before adding packing items.' : `${overview.items.length} items tracked.`}</p>
+      {overview.trips.length === 0 ? (
+        <div class="mt-3 border border-grid bg-paper p-3 text-xs text-muted">Add a trip first, then you can build packing lists per trip.</div>
+      ) : (
+        <details class="form-card mt-3" open={overview.items.length === 0}>
+          <summary>Add Trip Item</summary>
+          <form method="post" action="/api/pillars/trip-item" class="mt-3 grid gap-2 md:grid-cols-2">
+            <input type="hidden" name="year" value={selectedYear} />
+            <select name="trip_id" required>
+              {overview.trips.map((trip) => <option value={trip.id}>{trip.trip_name}</option>)}
+            </select>
+            <input type="text" name="item_name" required placeholder="Item" />
+            <input type="text" name="category" placeholder="Category" />
+            <input type="number" name="qty" min="1" value="1" />
+            <label class="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="packed" value="1" /> Packed</label>
+            <textarea name="notes" rows="2" class="md:col-span-2" placeholder="Notes"></textarea>
+            <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Item</button>
+          </form>
+        </details>
+      )}
+      <table class="table-report mt-4 w-full">
+        <thead><tr><th>Trip</th><th>Item</th><th class="text-right">Qty</th><th>Packed</th></tr></thead>
+        <tbody>
+          {overview.items.length === 0 && <tr><td colspan="4" class="text-xs text-muted">No packing items yet. Start with essentials and meds for each family member.</td></tr>}
+          {overview.items.map((row) => <tr><td>{row.trip_name}</td><td>{row.item_name}</td><td class="mono-num">{row.qty}</td><td>{row.packed ? 'Yes' : 'No'}</td></tr>)}
+        </tbody>
+      </table>
+    </article>
+  </section>
+</BaseLayout>

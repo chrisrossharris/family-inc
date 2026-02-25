@@ -1,0 +1,17 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { SignOutButton } from '@clerk/astro/components';
+---
+
+<BaseLayout title="Log Out" subtitle="Session controls">
+  <section class="panel">
+    <h2 class="panel-title">Sign Out</h2>
+    <p class="mt-2 text-sm text-muted">Use Clerk sign-out to end your session.</p>
+    <div class="mt-3 flex gap-2">
+      <SignOutButton>
+        <button class="border border-ink bg-ink px-3 py-1 text-xs uppercase tracking-report text-paper">Log out</button>
+      </SignOutButton>
+      <a href="/" class="border border-grid px-3 py-1 text-xs uppercase tracking-report hover:bg-ink hover:text-paper">Cancel</a>
+    </div>
+  </section>
+</BaseLayout>
