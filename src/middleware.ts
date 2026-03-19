@@ -74,11 +74,17 @@ function requiresPremium(pathname: string): boolean {
 export const onRequest = clerkMiddleware(async (auth, context, next) => {
   const requestMethod = context.request.method.toUpperCase();
   const isMutation = !['GET', 'HEAD', 'OPTIONS'].includes(requestMethod);
-  const csrfExempt = context.url.pathname === '/api/stripe/webhook';
+  const csrfExemptPaths = new Set(['/api/stripe/webhook', '/api/session/switch-tenant', '/api/session/accessibility', '/api/session/logout']);
+  const csrfExempt = csrfExemptPaths.has(context.url.pathname);
   if (isMutation) {
     const origin = context.request.headers.get('origin');
     const referer = context.request.headers.get('referer');
-    const sameOrigin = origin === context.url.origin || (!!referer && referer.startsWith(context.url.origin));
+    const secFetchSite = context.request.headers.get('sec-fetch-site');
+    const sameOrigin =
+      origin === context.url.origin ||
+      (!!referer && referer.startsWith(context.url.origin)) ||
+      secFetchSite === 'same-origin' ||
+      secFetchSite === 'same-site';
     if (csrfExempt) {
       // webhook requests originate from Stripe, not browser.
     } else if (!sameOrigin) {
