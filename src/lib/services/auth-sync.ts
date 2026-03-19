@@ -71,6 +71,33 @@ async function acceptPendingInvitationsForEmail(userId: string, email: string): 
   return acceptedTenantIds;
 }
 
+async function recoverMembershipsByEmail(userId: string, email: string): Promise<string[]> {
+  const legacyRows = await db.all<{ tenant_id: string; role: 'owner' | 'admin' | 'editor' | 'viewer' }>(
+    `
+      SELECT m.tenant_id, m.role
+      FROM memberships m
+      INNER JOIN users u ON u.id = m.user_id
+      WHERE LOWER(u.email) = LOWER(?)
+      ORDER BY m.created_at ASC
+    `,
+    [email]
+  );
+  if (legacyRows.length === 0) return [];
+
+  const attached: string[] = [];
+  await db.transaction(async (tx) => {
+    for (const row of legacyRows) {
+      await tx.run('INSERT INTO memberships (tenant_id, user_id, role) VALUES (?, ?, ?) ON CONFLICT (tenant_id, user_id) DO NOTHING', [
+        row.tenant_id,
+        userId,
+        row.role
+      ]);
+      attached.push(row.tenant_id);
+    }
+  });
+  return attached;
+}
+
 export async function resolveAppWorkspace(params: {
   userId: string;
   email: string;
@@ -83,6 +110,7 @@ export async function resolveAppWorkspace(params: {
 
   const resolvedUserId = await upsertUser(userId, email, displayName);
   const acceptedTenants = await acceptPendingInvitationsForEmail(resolvedUserId, email);
+  const recoveredTenants = await recoverMembershipsByEmail(resolvedUserId, email);
 
   if (clerkOrgId) {
     const tenantId = `org_${clerkOrgId}`;
@@ -93,9 +121,8 @@ export async function resolveAppWorkspace(params: {
 
   const memberships = await db.all<{ tenant_id: string }>('SELECT tenant_id FROM memberships WHERE user_id = ? ORDER BY created_at ASC', [resolvedUserId]);
 
-  if (acceptedTenants.length > 0) {
-    return { tenantId: acceptedTenants[0]!, userId: resolvedUserId };
-  }
+  if (acceptedTenants.length > 0) return { tenantId: acceptedTenants[0]!, userId: resolvedUserId };
+  if (recoveredTenants.length > 0) return { tenantId: recoveredTenants[0]!, userId: resolvedUserId };
 
   if (preferredTenantId) {
     const hasPreferred = memberships.some((row) => row.tenant_id === preferredTenantId);

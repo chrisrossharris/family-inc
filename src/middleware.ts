@@ -86,7 +86,8 @@ export const onRequest = clerkMiddleware(async (auth, context, next) => {
     }
   }
 
-  const { userId, redirectToSignIn } = auth();
+  const authState = auth();
+  const { userId, redirectToSignIn } = authState;
   const secure = context.url.protocol === 'https:';
 
   if (!userId && !isPublicRoute(context.request)) {
@@ -100,7 +101,11 @@ export const onRequest = clerkMiddleware(async (auth, context, next) => {
   }
 
   const user = await context.locals.currentUser();
-  const email = user?.primaryEmailAddress?.emailAddress ?? `${userId}@users.familyinc.local`;
+  const claimedEmail =
+    (authState as { sessionClaims?: { email?: unknown; primary_email_address?: unknown } }).sessionClaims?.email ??
+    (authState as { sessionClaims?: { email?: unknown; primary_email_address?: unknown } }).sessionClaims?.primary_email_address;
+  const claimEmailString = typeof claimedEmail === 'string' ? claimedEmail : null;
+  const email = user?.primaryEmailAddress?.emailAddress ?? claimEmailString ?? `${userId}@users.familyinc.local`;
   const displayName = user?.fullName ?? user?.username ?? 'Family Inc User';
   const orgId = (auth() as { orgId?: string | null }).orgId;
   const orgName = (auth() as { orgName?: string | null }).orgName;
