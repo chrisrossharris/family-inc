@@ -22,7 +22,9 @@ interface DbClient {
 function resolveDatabaseUrl(): string {
   const explicit =
     process.env.DATABASE_URL ??
+    process.env.DATABASE_URL_UNPOOLED ??
     process.env.NETLIFY_DATABASE_URL_UNPOOLED ??
+    process.env.NETLIFY_DATABASE_URL ??
     process.env.TURSO_DATABASE_URL ??
     'file:./data/family-ledger.sqlite';
   return explicit;

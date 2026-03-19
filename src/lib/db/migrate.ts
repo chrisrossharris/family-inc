@@ -5,14 +5,28 @@ import { Pool } from 'pg';
 import { schemaSql } from './schema';
 import { postgresSchemaSql } from './schema-postgres';
 
-function resolveMigrationDatabaseUrl(): string {
-  return (
-    process.env.MIGRATIONS_DATABASE_URL ??
-    process.env.NETLIFY_DATABASE_URL_UNPOOLED ??
-    process.env.DATABASE_URL ??
-    process.env.TURSO_DATABASE_URL ??
-    'file:./data/family-ledger.sqlite'
-  );
+function pickFirstEnv(keys: string[]): { key: string; value: string } | null {
+  for (const key of keys) {
+    const raw = process.env[key];
+    if (!raw) continue;
+    const value = raw.trim();
+    if (value.length > 0) return { key, value };
+  }
+  return null;
+}
+
+function resolveMigrationDatabaseUrl(): { source: string; url: string } {
+  const selected = pickFirstEnv([
+    'MIGRATIONS_DATABASE_URL',
+    'DATABASE_URL',
+    'DATABASE_URL_UNPOOLED',
+    'NETLIFY_DATABASE_URL_UNPOOLED',
+    'NETLIFY_DATABASE_URL',
+    'TURSO_DATABASE_URL'
+  ]);
+
+  if (selected) return { source: selected.key, url: selected.value };
+  return { source: 'default', url: 'file:./data/family-ledger.sqlite' };
 }
 
 function isPostgresUrl(url: string): boolean {
@@ -133,10 +147,11 @@ async function main() {
     return;
   }
 
-  const url = resolveMigrationDatabaseUrl();
+  const resolved = resolveMigrationDatabaseUrl();
+  const url = resolved.url;
   const postgres = isPostgresUrl(url);
 
-  console.log(`Running ${migrationFiles.length} migration(s) on ${postgres ? 'postgres' : 'libsql/sqlite'}`);
+  console.log(`Running ${migrationFiles.length} migration(s) on ${postgres ? 'postgres' : 'libsql/sqlite'} (source=${resolved.source})`);
   if (postgres) await runPostgresMigrations(url, migrationFiles);
   else await runLibsqlMigrations(url, migrationFiles);
   console.log('Migrations complete');

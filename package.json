@@ -12,7 +12,8 @@
     "smoke:deploy": "node --import tsx/esm src/tests/deploy-smoke.ts",
     "test:tenant-isolation": "node --import tsx/esm src/tests/tenant-isolation.ts",
     "db:seed": "tsx src/lib/db/seed.ts",
-    "db:migrate": "node --import tsx/esm src/lib/db/migrate.ts"
+    "db:migrate": "node --import tsx/esm src/lib/db/migrate.ts",
+    "db:push-local": "node --import tsx/esm src/lib/db/push-local-to-postgres.ts"
   },
   "dependencies": {
     "@astrojs/netlify": "^6.4.0",

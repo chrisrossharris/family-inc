@@ -78,7 +78,13 @@ export function evaluateRuntimeEnv(envInput: EnvMap = getRuntimeEnv()): RuntimeE
 
   const publishableKey = readFirst(env, ['PUBLIC_CLERK_PUBLISHABLE_KEY', 'CLERK_PUBLISHABLE_KEY']);
   const clerkSecret = readFirst(env, ['CLERK_SECRET_KEY']);
-  const databaseUrl = readFirst(env, ['DATABASE_URL', 'DATABASE_URL_UNPOOLED', 'NETLIFY_DATABASE_URL_UNPOOLED', 'TURSO_DATABASE_URL']);
+  const databaseUrl = readFirst(env, [
+    'DATABASE_URL',
+    'DATABASE_URL_UNPOOLED',
+    'NETLIFY_DATABASE_URL_UNPOOLED',
+    'NETLIFY_DATABASE_URL',
+    'TURSO_DATABASE_URL'
+  ]);
 
   if (!publishableKey) missingCore.push('PUBLIC_CLERK_PUBLISHABLE_KEY');
   else if (!clerkPublishableSchema.safeParse(publishableKey).success) invalidCore.push('PUBLIC_CLERK_PUBLISHABLE_KEY');
@@ -86,7 +92,7 @@ export function evaluateRuntimeEnv(envInput: EnvMap = getRuntimeEnv()): RuntimeE
   if (!clerkSecret) missingCore.push('CLERK_SECRET_KEY');
   else if (!clerkSecretSchema.safeParse(clerkSecret).success) invalidCore.push('CLERK_SECRET_KEY');
 
-  if (!databaseUrl) missingCore.push('DATABASE_URL|NETLIFY_DATABASE_URL_UNPOOLED|TURSO_DATABASE_URL');
+  if (!databaseUrl) missingCore.push('DATABASE_URL|DATABASE_URL_UNPOOLED|NETLIFY_DATABASE_URL_UNPOOLED|NETLIFY_DATABASE_URL|TURSO_DATABASE_URL');
   else if (!dbUrlSchema.safeParse(databaseUrl).success) invalidCore.push('DATABASE_URL');
 
   const stripeSecret = readFirst(env, ['STRIPE_SECRET_KEY', 'STRIPE_SECRET', 'NETLIFY_STRIPE_SECRET_KEY']);
