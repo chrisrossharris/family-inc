@@ -76,10 +76,9 @@ export function evaluateRuntimeEnv(envInput: EnvMap = getRuntimeEnv()): RuntimeE
   const missingBilling: string[] = [];
   const invalidBilling: string[] = [];
 
-  const publishableKey = readFirst(env, ['PUBLIC_CLERK_PUBLISHABLE_KEY']);
+  const publishableKey = readFirst(env, ['PUBLIC_CLERK_PUBLISHABLE_KEY', 'CLERK_PUBLISHABLE_KEY']);
   const clerkSecret = readFirst(env, ['CLERK_SECRET_KEY']);
-  const databaseUrl = readFirst(env, ['DATABASE_URL', 'NETLIFY_DATABASE_URL_UNPOOLED', 'TURSO_DATABASE_URL']);
-  const importJobSecret = readFirst(env, ['IMPORT_JOB_SECRET']);
+  const databaseUrl = readFirst(env, ['DATABASE_URL', 'DATABASE_URL_UNPOOLED', 'NETLIFY_DATABASE_URL_UNPOOLED', 'TURSO_DATABASE_URL']);
 
   if (!publishableKey) missingCore.push('PUBLIC_CLERK_PUBLISHABLE_KEY');
   else if (!clerkPublishableSchema.safeParse(publishableKey).success) invalidCore.push('PUBLIC_CLERK_PUBLISHABLE_KEY');
@@ -90,15 +89,11 @@ export function evaluateRuntimeEnv(envInput: EnvMap = getRuntimeEnv()): RuntimeE
   if (!databaseUrl) missingCore.push('DATABASE_URL|NETLIFY_DATABASE_URL_UNPOOLED|TURSO_DATABASE_URL');
   else if (!dbUrlSchema.safeParse(databaseUrl).success) invalidCore.push('DATABASE_URL');
 
-  if (isProductionLike(env) && !importJobSecret) {
-    missingCore.push('IMPORT_JOB_SECRET');
-  }
-
   const stripeSecret = readFirst(env, ['STRIPE_SECRET_KEY', 'STRIPE_SECRET', 'NETLIFY_STRIPE_SECRET_KEY']);
   const stripePlus = readFirst(env, ['STRIPE_PRICE_FAMILY_PLUS', 'STRIPE_PRICE_ID_FAMILY_PLUS', 'STRIPE_FAMILY_PLUS_PRICE_ID']);
   const stripePro = readFirst(env, ['STRIPE_PRICE_FAMILY_PRO', 'STRIPE_PRICE_ID_FAMILY_PRO', 'STRIPE_FAMILY_PRO_PRICE_ID']);
   const billingFlag = readFirst(env, ['REQUIRE_STRIPE_BILLING']);
-  const billingRequired = billingFlag === '1' || isProductionLike(env) || !!stripeSecret || !!stripePlus || !!stripePro;
+  const billingRequired = billingFlag === '1' || !!stripeSecret || !!stripePlus || !!stripePro;
 
   if (billingRequired) {
     if (!stripeSecret) missingBilling.push('STRIPE_SECRET_KEY');

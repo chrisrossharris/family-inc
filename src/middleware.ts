@@ -6,6 +6,12 @@ import { getTenantBilling, hasPremiumAccess } from '@/lib/services/billing';
 import { assertRuntimeEnv, evaluateRuntimeEnv } from '@/lib/config/runtime-env';
 import { ensureFinanceEntitiesForTenant } from '@/lib/services/finance-entities';
 
+const normalizedClerkPublishableKey = process.env.CLERK_PUBLISHABLE_KEY?.trim() || process.env.PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
+if (normalizedClerkPublishableKey) {
+  process.env.CLERK_PUBLISHABLE_KEY = normalizedClerkPublishableKey;
+  process.env.PUBLIC_CLERK_PUBLISHABLE_KEY = normalizedClerkPublishableKey;
+}
+
 const startupEnv = evaluateRuntimeEnv();
 if (startupEnv.mode === 'production') {
   assertRuntimeEnv();
