@@ -121,13 +121,13 @@ export async function resolveAppWorkspace(params: {
 
   const memberships = await db.all<{ tenant_id: string }>('SELECT tenant_id FROM memberships WHERE user_id = ? ORDER BY created_at ASC', [resolvedUserId]);
 
-  if (acceptedTenants.length > 0) return { tenantId: acceptedTenants[0]!, userId: resolvedUserId };
-  if (recoveredTenants.length > 0) return { tenantId: recoveredTenants[0]!, userId: resolvedUserId };
-
   if (preferredTenantId) {
     const hasPreferred = memberships.some((row) => row.tenant_id === preferredTenantId);
     if (hasPreferred) return { tenantId: preferredTenantId, userId: resolvedUserId };
   }
+
+  if (acceptedTenants.length > 0) return { tenantId: acceptedTenants[0]!, userId: resolvedUserId };
+  if (recoveredTenants.length > 0) return { tenantId: recoveredTenants[0]!, userId: resolvedUserId };
 
   if (memberships.length > 0) return { tenantId: memberships[0]!.tenant_id, userId: resolvedUserId };
 
