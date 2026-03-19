@@ -36,6 +36,16 @@ Set these in `.env` (local) and Netlify (production):
   - `TURSO_AUTH_TOKEN`
 - Background import security:
   - `IMPORT_JOB_SECRET`
+- Stripe:
+  - `STRIPE_SECRET_KEY`
+  - `STRIPE_WEBHOOK_SECRET`
+  - `STRIPE_PRICE_FAMILY_PLUS` (or `STRIPE_PRICE_ID_FAMILY_PLUS`)
+  - `STRIPE_PRICE_FAMILY_PRO` (or `STRIPE_PRICE_ID_FAMILY_PRO`)
+  - Optional strict flag: `REQUIRE_STRIPE_BILLING=1`
+- Invite email (Resend):
+  - `RESEND_API_KEY`
+  - `INVITE_FROM_EMAIL` (example: `Family Inc <onboarding@yourdomain.com>`)
+  - `APP_BASE_URL` (example local: `http://localhost:4321`)
 
 ## Run
 
@@ -47,13 +57,29 @@ npm run db:seed
 npm run dev
 ```
 
+## Runtime Health + Deploy Smoke Checks
+
+- Public runtime health endpoint:
+  - `/api/system/health` (core checks)
+  - `/api/system/health?strict=1` (core + billing checks)
+
+Run before deploy:
+
+```bash
+npm run env:check
+npm run smoke:deploy -- https://your-netlify-site.netlify.app
+```
+
 ## Deploy to Netlify
 
 1. Connect repo in Netlify.
 2. Build command: `npm run db:migrate && npm run build`.
 3. Publish directory: `dist`.
 4. Add env vars above (Clerk + DB).
-5. Deploy.
+5. Run smoke checks:
+   - `npm run env:check`
+   - `npm run smoke:deploy -- https://<your-site>.netlify.app`
+6. Deploy.
 
 ## Routes
 
@@ -66,6 +92,13 @@ npm run dev
 - `/settings`
 - `/settings/tenant-health`
 - `/annual-report`
+- `/pricing`
+
+## Member Invite Flow
+
+- Sending an invite creates a `pending` invitation record and attempts Resend delivery.
+- When invitee signs in/up using that invited email, pending invites are auto-accepted and workspace membership is created.
+- If `RESEND_API_KEY` is missing, invite is still saved in DB but email delivery is skipped.
 
 ## Background Imports
 
@@ -76,3 +109,14 @@ npm run dev
   - `/api/import-jobs/run` (protected by `IMPORT_JOB_SECRET` when set)
 - Netlify background function:
   - `/.netlify/functions/import-run-background`
+
+## Stripe Payments (Invoices)
+
+- Internal invoice page can open Stripe Checkout for outstanding balances.
+- Webhook endpoint:
+  - `/api/stripe/webhook`
+- Configure this webhook in Stripe for:
+  - `checkout.session.completed`
+  - `customer.subscription.created`
+  - `customer.subscription.updated`
+  - `customer.subscription.deleted`

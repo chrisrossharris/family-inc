@@ -6,13 +6,19 @@ const tenantId = Astro.locals.tenantId;
 const members = await listMembers(tenantId);
 const invitations = await listInvitations(tenantId);
 const invited = Astro.url.searchParams.get('invited');
+const inviteEmail = Astro.url.searchParams.get('inviteEmail');
+const inviteError = Astro.url.searchParams.get('inviteError');
 const updated = Astro.url.searchParams.get('updated');
+const removed = Astro.url.searchParams.get('removed');
 const error = Astro.url.searchParams.get('error');
 ---
 
 <BaseLayout title="Family Members" subtitle="Invite and manage shared access.">
   {invited && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Invitation queued for {invited}.</div>}
+  {invited && inviteEmail === 'sent' && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Invite email sent to {invited}.</div>}
+  {invited && inviteEmail === 'failed' && <div class="mb-4 border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Invite saved but email was not sent. {inviteError ? `Reason: ${inviteError}` : 'Check `RESEND_API_KEY` and `INVITE_FROM_EMAIL`.'}</div>}
   {updated && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Updated member role: {updated}</div>}
+  {removed && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Removed member: {removed}</div>}
   {error === 'last-owner' && <div class="mb-4 border border-red-300 bg-red-50 p-3 text-sm text-red-900">Cannot demote the last owner. Assign another owner first.</div>}
 
   <section class="panel">
@@ -33,10 +39,10 @@ const error = Astro.url.searchParams.get('error');
   <section class="panel mt-4 overflow-x-auto">
     <h2 class="panel-title">Current Members</h2>
     <p class="mt-2 text-xs text-muted">You can update access role directly per member.</p>
-    <table class="table-report mt-3 w-full min-w-[700px]">
-      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Edit</th></tr></thead>
+    <table class="table-report mt-3 w-full min-w-[820px]">
+      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Edit</th><th>Remove</th></tr></thead>
       <tbody>
-        {members.length === 0 && <tr><td colspan="4" class="text-xs text-muted">No members yet.</td></tr>}
+        {members.length === 0 && <tr><td colspan="5" class="text-xs text-muted">No members yet.</td></tr>}
         {members.map((member, index) => (
           <tr>
             <td>{member.display_name}</td>
@@ -56,6 +62,15 @@ const error = Astro.url.searchParams.get('error');
               <form id={`member-role-${index}`} method="post" action="/api/members/update-role" class="hidden">
                 <input type="hidden" name="user_id" value={member.user_id} />
                 <input type="hidden" name="returnTo" value="/members" />
+              </form>
+            </td>
+            <td>
+              <form method="post" action="/api/members/remove" onsubmit="return confirm('Remove this member from workspace access?');">
+                <input type="hidden" name="user_id" value={member.user_id} />
+                <input type="hidden" name="returnTo" value="/members" />
+                <button type="submit" class="border border-red-500 px-2 py-1 text-[10px] uppercase tracking-report text-red-700 hover:bg-red-600 hover:text-paper">
+                  Remove
+                </button>
               </form>
             </td>
           </tr>

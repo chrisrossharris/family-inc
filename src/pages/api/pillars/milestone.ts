@@ -2,9 +2,10 @@ import type { APIRoute } from 'astro';
 import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { normalizeReportYear } from '@/lib/utils/year';
-import { addFamilyMilestone } from '@/lib/services/pillars';
+import { addFamilyMilestone, updateFamilyMilestone } from '@/lib/services/pillars';
 
 const schema = z.object({
+  id: z.coerce.number().int().positive().optional(),
   member_name: z.string().optional(),
   milestone_date: z.string().min(10),
   area: z.string().min(1),
@@ -19,6 +20,19 @@ export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => 
 
   const session = resolveSession(locals, cookies);
   const year = normalizeReportYear(parsed.data.year);
+  if (parsed.data.id) {
+    await updateFamilyMilestone({
+      tenantId: session.tenantId,
+      id: parsed.data.id,
+      memberName: parsed.data.member_name || null,
+      milestoneDate: parsed.data.milestone_date,
+      area: parsed.data.area,
+      title: parsed.data.title,
+      notes: parsed.data.notes || null
+    });
+    return redirect(`/milestones?year=${year}&saved=milestone_updated`, 303);
+  }
+
   await addFamilyMilestone({
     tenantId: session.tenantId,
     memberName: parsed.data.member_name || null,
@@ -28,5 +42,5 @@ export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => 
     notes: parsed.data.notes || null
   });
 
-  return redirect(`/milestones?year=${year}&saved=milestone`, 303);
+  return redirect(`/milestones?year=${year}&saved=milestone_created`, 303);
 };

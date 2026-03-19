@@ -2,9 +2,10 @@ import type { APIRoute } from 'astro';
 import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { normalizeReportYear } from '@/lib/utils/year';
-import { addGroceryItem } from '@/lib/services/pillars';
+import { addGroceryItem, updateGroceryItem } from '@/lib/services/pillars';
 
 const schema = z.object({
+  id: z.coerce.number().int().positive().optional(),
   item_name: z.string().min(1),
   category: z.string().min(1),
   quantity: z.coerce.number().optional(),
@@ -21,6 +22,21 @@ export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => 
 
   const session = resolveSession(locals, cookies);
   const year = normalizeReportYear(parsed.data.year);
+  if (parsed.data.id) {
+    await updateGroceryItem({
+      tenantId: session.tenantId,
+      id: parsed.data.id,
+      itemName: parsed.data.item_name,
+      category: parsed.data.category,
+      quantity: parsed.data.quantity,
+      unit: parsed.data.unit || null,
+      needed: parsed.data.needed ? 1 : 0,
+      lastPurchasedOn: parsed.data.last_purchased_on || null,
+      notes: parsed.data.notes || null
+    });
+    return redirect(`/home-groceries?year=${year}&saved=grocery_updated`, 303);
+  }
+
   await addGroceryItem({
     tenantId: session.tenantId,
     itemName: parsed.data.item_name,
@@ -32,5 +48,5 @@ export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => 
     notes: parsed.data.notes || null
   });
 
-  return redirect(`/home-groceries?year=${year}&saved=grocery`, 303);
+  return redirect(`/home-groceries?year=${year}&saved=grocery_created`, 303);
 };

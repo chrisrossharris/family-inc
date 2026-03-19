@@ -13,7 +13,43 @@ const importedIncome = Astro.url.searchParams.get('importedIncome') === '1';
 const insertedIncome = Number(Astro.url.searchParams.get('insertedIncome') ?? '0');
 const skippedIncome = Number(Astro.url.searchParams.get('skippedIncome') ?? '0');
 const invalidIncome = Number(Astro.url.searchParams.get('invalidIncome') ?? '0');
+const previewIncome = Astro.url.searchParams.get('previewIncome') === '1';
+const previewTotal = Number(Astro.url.searchParams.get('previewTotal') ?? '0');
+const previewValid = Number(Astro.url.searchParams.get('previewValid') ?? '0');
+const previewInvalid = Number(Astro.url.searchParams.get('previewInvalid') ?? '0');
+const previewIncomeLike = Number(Astro.url.searchParams.get('previewIncomeLike') ?? '0');
 const overview = await getIncomeOverview(tenantId, selectedYear);
+const unallocatedReceipts = overview.receipts.filter((row) => row.unallocatedAmount > 0).length;
+const allocationWarning = overview.stats.allocationRate < 0.9;
+const concentrationWarning = overview.stats.topClientShare > 0.6;
+const allocationTotal = overview.stats.chrisIncome + overview.stats.kateIncome + overview.stats.bigPictureIncome;
+const pieData = [
+  { key: 'chris', label: 'Chris', value: overview.stats.chrisIncome, color: '#1f1f1d' },
+  { key: 'kate', label: 'Kate', value: overview.stats.kateIncome, color: '#6b6b67' },
+  { key: 'big_picture', label: 'Big Picture', value: overview.stats.bigPictureIncome, color: '#b6b6b1' }
+].filter((row) => row.value > 0);
+
+function toArcPath(cx: number, cy: number, r: number, startAngle: number, endAngle: number) {
+  const start = {
+    x: cx + r * Math.cos((startAngle * Math.PI) / 180),
+    y: cy + r * Math.sin((startAngle * Math.PI) / 180)
+  };
+  const end = {
+    x: cx + r * Math.cos((endAngle * Math.PI) / 180),
+    y: cy + r * Math.sin((endAngle * Math.PI) / 180)
+  };
+  const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+  return `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y} Z`;
+}
+
+let pieAngle = -90;
+const pieSlices = pieData.map((row) => {
+  const sweep = allocationTotal > 0 ? (row.value / allocationTotal) * 360 : 0;
+  const start = pieAngle;
+  const end = pieAngle + sweep;
+  pieAngle = end;
+  return { ...row, start, end };
+});
 ---
 
 <BaseLayout title="Income" subtitle="Track earned income and support sources with clear split allocations by entity.">
@@ -23,8 +59,13 @@ const overview = await getIncomeOverview(tenantId, selectedYear);
       Income import completed. Inserted: {insertedIncome} | Skipped: {skippedIncome} | Invalid: {invalidIncome}
     </div>
   )}
+  {previewIncome && (
+    <div class="mb-4 border border-grid bg-paper p-3 text-sm">
+      Import preview. Total: {previewTotal} | Valid: {previewValid} | Invalid: {previewInvalid} | Income-like: {previewIncomeLike}
+    </div>
+  )}
   {updated > 0 && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Updated {updated} income row{updated === 1 ? '' : 's'}.</div>}
-  {invalid > 0 && <div class="mb-4 border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Skipped {invalid} row{invalid === 1 ? '' : 's'} due to invalid values (split must be &gt; 0 and ≤ 100, gross &gt; 0).</div>}
+  {invalid > 0 && <div class="mb-4 border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Skipped {invalid} row{invalid === 1 ? '' : 's'} due to invalid values (date, payer/client, or gross amount missing).</div>}
 
   <section class="grid gap-4 md:grid-cols-4 lg:grid-cols-9">
     <article class="panel"><p class="panel-title">Total Income</p><p class="mono-num mt-2 text-2xl">{formatCurrency(overview.stats.totalIncome)}</p></article>
@@ -54,18 +95,21 @@ const overview = await getIncomeOverview(tenantId, selectedYear);
             <option value="gift">Gift</option>
             <option value="unemployment">Unemployment</option>
             <option value="food_stamps">Food Stamps</option>
+            <option value="interest">Interest</option>
             <option value="other">Other</option>
           </select>
           <input type="text" name="payer_name" required placeholder="Client / source name" />
           <input type="text" name="project_name" placeholder="Project (optional)" class="md:col-span-2" />
           <div class="md:col-span-2 border border-grid p-2">
-            <p class="panel-title">Split Allocation %</p>
-            <div class="mt-2 grid gap-2 md:grid-cols-3">
-              <input type="number" name="split_chris" min="0" max="100" step="0.1" value="0" placeholder="Chris %" />
-              <input type="number" name="split_kate" min="0" max="100" step="0.1" value="0" placeholder="Kate %" />
-              <input type="number" name="split_big_picture" min="0" max="100" step="0.1" value="100" placeholder="Big Picture %" />
+            <p class="panel-title">Allocation Entity</p>
+            <div class="mt-2 grid gap-2 md:grid-cols-2">
+              <select name="allocation_entity" required>
+                <option value="chris">Chris (100%)</option>
+                <option value="kate">Kate (100%)</option>
+                <option value="big_picture" selected>Big Picture (100%)</option>
+              </select>
             </div>
-            <p class="mt-2 text-[10px] text-muted">Example: Elephant Wines $2500 with 50% to Big Picture = Big Picture 50, others 0.</p>
+            <p class="mt-2 text-[10px] text-muted">Applies 100% of this receipt to one entity.</p>
           </div>
           <textarea name="notes" rows="2" class="md:col-span-2" placeholder="Notes"></textarea>
           <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Income</button>
@@ -76,7 +120,12 @@ const overview = await getIncomeOverview(tenantId, selectedYear);
     <article class="panel">
       <h2 class="panel-title">Import Income CSV</h2>
       <p class="mt-2 text-xs text-muted">Accepted columns include: Date, Source Type, Payer/Client, Project, Gross Amount, split percentages.</p>
-      <form method="post" action="/api/income/import" enctype="multipart/form-data" class="mt-3 space-y-2">
+      <form method="post" action="/api/income/import-preview" enctype="multipart/form-data" class="mt-3 space-y-2">
+        <input type="hidden" name="year" value={selectedYear} />
+        <input type="file" name="file" accept=".csv" required class="w-full text-sm" />
+        <button type="submit" class="w-full border border-grid px-3 py-2 text-xs uppercase tracking-report hover:bg-ink hover:text-paper">Preview Import CSV</button>
+      </form>
+      <form method="post" action="/api/income/import" enctype="multipart/form-data" class="mt-2 space-y-2">
         <input type="hidden" name="year" value={selectedYear} />
         <input type="file" name="file" accept=".csv" required class="w-full text-sm" />
         <button type="submit" class="w-full border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Import Income CSV</button>
@@ -116,6 +165,41 @@ const overview = await getIncomeOverview(tenantId, selectedYear);
     </article>
   </section>
 
+  <section class="panel mt-4">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h2 class="panel-title">Allocation Mix</h2>
+        <p class="mt-2 text-xs text-muted">Allocated income split by entity for {selectedYear}. Edit rows below, save, and this updates.</p>
+      </div>
+      {allocationTotal > 0 ? (
+        <div class="grid gap-2 sm:grid-cols-[160px_1fr]">
+          <svg viewBox="0 0 120 120" class="h-36 w-36">
+            {pieSlices.map((slice) => (
+              <path d={toArcPath(60, 60, 54, slice.start, slice.end)} fill={slice.color} />
+            ))}
+            <circle cx="60" cy="60" r="22" fill="rgba(255,255,255,0.75)" />
+            <text x="60" y="57" text-anchor="middle" class="font-mono text-[8px] uppercase fill-ink">Total</text>
+            <text x="60" y="68" text-anchor="middle" class="font-mono text-[8px] fill-ink">{formatCurrency(allocationTotal)}</text>
+          </svg>
+          <div class="space-y-2 text-xs">
+            {pieSlices.map((slice) => (
+              <div class="flex items-center justify-between gap-3 border border-grid px-2 py-1">
+                <div class="inline-flex items-center gap-2">
+                  <span class="inline-block h-2.5 w-2.5 border border-grid" style={`background:${slice.color}`}></span>
+                  <span>{slice.label}</span>
+                </div>
+                <span class="mono-num">{allocationTotal > 0 ? formatPercent(slice.value / allocationTotal) : '0.0%'}</span>
+                <span class="mono-num">{formatCurrency(slice.value)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p class="text-xs text-muted">No allocated income yet.</p>
+      )}
+    </div>
+  </section>
+
   <section class="panel mt-4 overflow-x-auto">
     <h2 class="panel-title">Income Ledger</h2>
     <form method="post" action="/api/income/grid-update">
@@ -125,11 +209,11 @@ const overview = await getIncomeOverview(tenantId, selectedYear);
         <thead>
           <tr>
             <th>Date</th><th>Source</th><th>Client / Source</th><th>Project</th><th class="text-right">Gross</th>
-            <th class="text-right">Chris %</th><th class="text-right">Kate %</th><th class="text-right">Big Picture %</th><th class="text-right">Split Total</th><th>Allocation</th><th class="text-right">Unallocated</th>
+            <th>Allocation Entity</th><th class="text-right">Split Total</th><th>Allocation</th><th class="text-right">Unallocated</th>
           </tr>
         </thead>
         <tbody>
-          {overview.receipts.length === 0 && <tr><td colspan="11" class="text-xs text-muted">No income receipts yet. Add your first payment above.</td></tr>}
+          {overview.receipts.length === 0 && <tr><td colspan="9" class="text-xs text-muted">No income receipts yet. Add your first payment above.</td></tr>}
           {overview.receipts.map((row) => (
             <tr>
               <td><input type="date" name={`received_date_${row.id}`} value={row.received_date} class="text-xs" /></td>
@@ -139,15 +223,20 @@ const overview = await getIncomeOverview(tenantId, selectedYear);
                   <option value="gift" selected={row.source_type === 'gift'}>Gift</option>
                   <option value="unemployment" selected={row.source_type === 'unemployment'}>Unemployment</option>
                   <option value="food_stamps" selected={row.source_type === 'food_stamps'}>Food Stamps</option>
+                  <option value="interest" selected={row.source_type === 'interest'}>Interest</option>
                   <option value="other" selected={row.source_type === 'other'}>Other</option>
                 </select>
               </td>
               <td><input type="text" name={`payer_name_${row.id}`} value={row.payer_name} class="text-xs" /></td>
               <td><input type="text" name={`project_name_${row.id}`} value={row.project_name ?? ''} class="text-xs" /></td>
               <td><input type="number" name={`gross_amount_${row.id}`} min="0.01" step="0.01" value={row.gross_amount.toFixed(2)} class="mono-num w-24 text-right text-xs" /></td>
-              <td><input type="number" name={`split_chris_${row.id}`} min="0" max="100" step="0.1" value={row.split_chris.toFixed(1)} class="mono-num w-16 text-right text-xs" /></td>
-              <td><input type="number" name={`split_kate_${row.id}`} min="0" max="100" step="0.1" value={row.split_kate.toFixed(1)} class="mono-num w-16 text-right text-xs" /></td>
-              <td><input type="number" name={`split_big_picture_${row.id}`} min="0" max="100" step="0.1" value={row.split_big_picture.toFixed(1)} class="mono-num w-20 text-right text-xs" /></td>
+              <td>
+                <select name={`allocation_entity_${row.id}`} class="text-xs">
+                  <option value="chris" selected={row.split_chris >= row.split_kate && row.split_chris >= row.split_big_picture}>Chris (100%)</option>
+                  <option value="kate" selected={row.split_kate > row.split_chris && row.split_kate >= row.split_big_picture}>Kate (100%)</option>
+                  <option value="big_picture" selected={row.split_big_picture > row.split_chris && row.split_big_picture > row.split_kate}>Big Picture (100%)</option>
+                </select>
+              </td>
               <td class:list={['mono-num', row.split_total_pct > 100 || row.split_total_pct <= 0 ? 'text-amber-900' : undefined]}>{row.split_total_pct.toFixed(1)}%</td>
               <td class="text-xs">{row.splitSummary}</td>
               <td class:list={['mono-num', row.unallocatedAmount > 0 ? 'text-amber-900' : undefined]}>{formatCurrency(row.unallocatedAmount)}</td>
@@ -155,8 +244,34 @@ const overview = await getIncomeOverview(tenantId, selectedYear);
           ))}
         </tbody>
       </table>
-      <button type="submit" class="sr-only">Save income ledger edits</button>
+      <div class="mt-3 flex justify-end">
+        <button type="submit" class="border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Allocation Changes</button>
+      </div>
     </form>
+  </section>
+
+  <section class="panel mt-4">
+    <h2 class="panel-title">Reconciliation Checks</h2>
+    <table class="table-report mt-3 w-full">
+      <thead><tr><th>Check</th><th>Status</th><th class="text-right">Value</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Allocation completeness</td>
+          <td>{allocationWarning ? 'Needs attention' : 'OK'}</td>
+          <td class:list={['mono-num', allocationWarning ? 'text-amber-900' : 'text-emerald-700']}>{formatPercent(overview.stats.allocationRate)}</td>
+        </tr>
+        <tr>
+          <td>Unallocated receipts</td>
+          <td>{unallocatedReceipts > 0 ? 'Needs attention' : 'OK'}</td>
+          <td class:list={['mono-num', unallocatedReceipts > 0 ? 'text-amber-900' : 'text-emerald-700']}>{unallocatedReceipts}</td>
+        </tr>
+        <tr>
+          <td>Client concentration risk</td>
+          <td>{concentrationWarning ? 'High' : 'Normal'}</td>
+          <td class:list={['mono-num', concentrationWarning ? 'text-amber-900' : 'text-emerald-700']}>{formatPercent(overview.stats.topClientShare)}</td>
+        </tr>
+      </tbody>
+    </table>
   </section>
 
   <footer class="mt-6 border-t border-grid pt-4 text-xs text-muted">

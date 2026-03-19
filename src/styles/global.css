@@ -53,16 +53,77 @@ details.form-card[open] > summary {
   @apply text-xs uppercase tracking-report text-muted;
 }
 
+.kpi-grid {
+  @apply grid grid-cols-2 gap-3 md:gap-4;
+}
+
+.kpi-card {
+  @apply border border-grid bg-white/60 p-3 md:p-4;
+}
+
+.kpi-value {
+  @apply mono-num mt-1 text-[clamp(1rem,2.2vw,1.55rem)] leading-[1.05] text-ink;
+}
+
+input:not([type='checkbox']):not([type='radio']),
+select,
+textarea {
+  @apply min-w-0 border border-grid bg-white/35 px-2 py-1.5 text-sm text-ink;
+}
+
 .mono-num {
   @apply font-mono tabular-nums text-right;
 }
 
 .table-report th {
-  @apply border-b border-grid pb-2 text-left text-xs uppercase tracking-report text-muted;
+  @apply border-b border-grid pb-2 text-xs uppercase tracking-report text-muted;
+}
+
+.table-report th:not(.text-right):not(.text-center) {
+  text-align: left;
+}
+
+.table-report th.text-right {
+  text-align: right;
+}
+
+.table-report th.text-center {
+  text-align: center;
 }
 
 .table-report td {
-  @apply border-b border-grid/60 py-2 text-sm;
+  @apply border-b border-grid/60 py-1.5 text-sm align-middle;
+}
+
+.table-report td input,
+.table-report td select,
+.table-report td textarea {
+  @apply bg-transparent px-2 py-1 text-sm;
+}
+
+.table-report .edit-date-range {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.mobile-edit-card {
+  @apply border border-grid bg-white/55 p-3 grid gap-2;
+}
+
+.mobile-edit-label {
+  @apply text-[9px] uppercase tracking-report text-muted;
+}
+
+.mobile-edit-label > input,
+.mobile-edit-label > select,
+.mobile-edit-label > textarea {
+  @apply mt-1 text-sm;
+}
+
+.mobile-edit-actions {
+  @apply sticky bottom-0 mt-1 -mx-3 border-t border-grid bg-paper/95 px-3 py-2 backdrop-blur;
 }
 
 .needs-review-table th {

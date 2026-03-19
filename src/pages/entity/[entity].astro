@@ -1,17 +1,19 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { ENTITY_LABELS, SCHEDULE_C_CATEGORIES } from '@/lib/constants';
+import { SCHEDULE_C_CATEGORIES } from '@/lib/constants';
+import { listFinanceEntityOptions } from '@/lib/services/finance-entities';
 import { getCategoryDistribution, getEntityLedger, getTopVendors } from '@/lib/services/reports';
 import { formatCurrency } from '@/lib/utils/format';
 import { normalizeReportYear } from '@/lib/utils/year';
-import type { Entity } from '@/lib/types';
 
-const entity = Astro.params.entity as Entity;
-if (!entity || !Object.keys(ENTITY_LABELS).includes(entity)) {
+const entity = String(Astro.params.entity ?? '').trim();
+const tenantId = Astro.locals.tenantId;
+const entityOptions = await listFinanceEntityOptions(tenantId);
+const entityMeta = entityOptions.find((item) => item.code === entity);
+if (!entity || !entityMeta) {
   return Astro.redirect('/');
 }
 
-const tenantId = Astro.locals.tenantId;
 const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
 const updatedRows = Astro.url.searchParams.get('updated');
 const categoryRows = await getCategoryDistribution(tenantId, entity, selectedYear);
@@ -20,7 +22,7 @@ const ledgerRows = await getEntityLedger(tenantId, entity, undefined, selectedYe
 const total = categoryRows.reduce((acc, row) => acc + row.total, 0);
 ---
 
-<BaseLayout title={`${ENTITY_LABELS[entity]} Detail`} subtitle="Entity operating ledger and controls.">
+<BaseLayout title={`${entityMeta.label} Detail`} subtitle="Entity operating ledger and controls.">
   {updatedRows && (
     <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">
       Updated {updatedRows} transaction{updatedRows === '1' ? '' : 's'}.
@@ -57,7 +59,7 @@ const total = categoryRows.reduce((acc, row) => acc + row.total, 0);
           ))}
         </tbody>
       </table>
-      <a class="mt-4 inline-block border border-grid px-3 py-1 text-xs uppercase tracking-report" href={`/api/exports/${entity}.csv?year=${selectedYear}`}>Export {ENTITY_LABELS[entity]} CSV</a>
+      <a class="mt-4 inline-block border border-grid px-3 py-1 text-xs uppercase tracking-report" href={`/api/exports/${entity}.csv?year=${selectedYear}`}>Export {entityMeta.label} CSV</a>
     </article>
   </section>
 
@@ -78,9 +80,9 @@ const total = categoryRows.reduce((acc, row) => acc + row.total, 0);
     <form method="post" action="/api/transactions-grid-update">
       <input type="hidden" name="ids" value={ledgerRows.map((row) => row.id).join(',')} />
       <p class="mb-2 text-[10px] uppercase tracking-report text-muted">Edit multiple rows, then press Enter in any field to save all.</p>
-      <table class="table-report mt-3 w-full min-w-[1100px]">
+      <table class="table-report mt-3 w-full min-w-[1200px]">
         <thead>
-          <tr><th>ID</th><th>Date</th><th>Vendor</th><th>Description</th><th>Account</th><th>Category</th><th>Confidence</th><th class="text-right">Amount</th></tr>
+          <tr><th>ID</th><th>Date</th><th>Vendor</th><th>Description</th><th>Account</th><th>Entity</th><th>Category</th><th>Confidence</th><th class="text-right">Amount</th></tr>
         </thead>
         <tbody>
           {ledgerRows.map((row) => (
@@ -89,10 +91,14 @@ const total = categoryRows.reduce((acc, row) => acc + row.total, 0);
               <td>{row.date}</td>
               <td>
                 <input name={`vendor_${row.id}`} value={row.vendor} class="text-xs" title="Press Enter to save all edits" />
-                <input type="hidden" name={`entity_${row.id}`} value={row.entity} />
               </td>
               <td><input name={`description_${row.id}`} value={row.description ?? ''} class="text-xs" title="Press Enter to save all edits" /></td>
               <td>{row.account}</td>
+              <td>
+                <select name={`entity_${row.id}`} class="text-xs">
+                  {entityOptions.map((option) => <option value={option.code} selected={row.entity === option.code}>{option.label}</option>)}
+                </select>
+              </td>
               <td>
                 <select name={`category_${row.id}`} class="text-xs">
                   {SCHEDULE_C_CATEGORIES.map((cat) => <option value={cat} selected={row.category === cat}>{cat}</option>)}

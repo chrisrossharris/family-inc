@@ -8,6 +8,16 @@ function yearParam(year?: string): string {
   return normalizeReportYear(year ?? DEFAULT_REPORT_YEAR);
 }
 
+function normalizeIncomeSourceType(value: string): IncomeSourceType {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'client_payment') return 'client_payment';
+  if (normalized === 'gift') return 'gift';
+  if (normalized === 'unemployment') return 'unemployment';
+  if (normalized === 'food_stamps') return 'food_stamps';
+  if (normalized === 'interest') return 'interest';
+  return 'other';
+}
+
 type IncomeSplitInput = {
   entity: Entity;
   percent: number;
@@ -51,9 +61,10 @@ export async function addIncomeReceipt(input: {
   notes?: string | null;
   importHash?: string | null;
   splits: IncomeSplitInput[];
-}): Promise<boolean> {
+}): Promise<{ inserted: boolean; id: number | null }> {
   const splitRows = buildIncomeSplitRows(input.grossAmount, input.splits);
   let insertedAny = false;
+  let insertedId: number | null = null;
 
   await db.transaction(async (tx) => {
     const inserted = await tx.get<{ id: number }>(
@@ -80,6 +91,7 @@ export async function addIncomeReceipt(input: {
 
     if (!inserted?.id) return;
     insertedAny = true;
+    insertedId = inserted.id;
 
     for (const split of splitRows) {
       await tx.run(
@@ -89,7 +101,7 @@ export async function addIncomeReceipt(input: {
       );
     }
   });
-  return insertedAny;
+  return { inserted: insertedAny, id: insertedId };
 }
 
 export async function updateIncomeReceipt(input: {
@@ -186,30 +198,33 @@ export async function getIncomeOverview(tenantId: string, year?: string) {
     [tenantId, reportYear]
   );
 
-  const clientProjectPaid = await db.all<{ client: string; project: string | null; total: number }>(
-    `SELECT r.payer_name AS client, r.project_name AS project, COALESCE(SUM(r.gross_amount), 0) AS total
+  const clientProjectPaidRaw = await db.all<{ source_type: string; client: string; project: string | null; total: number }>(
+    `SELECT r.source_type, r.payer_name AS client, r.project_name AS project, COALESCE(SUM(r.gross_amount), 0) AS total
      FROM income_receipts r
-     WHERE r.tenant_id = ? AND ${yearExpr} = ? AND r.source_type = 'client_payment'
-     GROUP BY r.payer_name, r.project_name
-     ORDER BY total DESC, client ASC
-     LIMIT 30`,
+     WHERE r.tenant_id = ? AND ${yearExpr} = ?
+     GROUP BY r.source_type, r.payer_name, r.project_name
+     ORDER BY total DESC, client ASC`,
     [tenantId, reportYear]
   );
+  const clientProjectPaid = clientProjectPaidRaw
+    .filter((row) => normalizeIncomeSourceType(row.source_type) === 'client_payment')
+    .map((row) => ({ client: row.client, project: row.project, total: row.total }))
+    .slice(0, 30);
 
   const entityTotals: Record<Entity, number> = { chris: 0, kate: 0, big_picture: 0 };
   for (const row of splits) {
     entityTotals[row.entity] += row.split_amount;
   }
 
-  const topClient = await db.get<{ client: string; total: number }>(
-    `SELECT r.payer_name AS client, COALESCE(SUM(r.gross_amount), 0) AS total
+  const topClientRows = await db.all<{ source_type: string; client: string; total: number }>(
+    `SELECT r.source_type, r.payer_name AS client, COALESCE(SUM(r.gross_amount), 0) AS total
      FROM income_receipts r
-     WHERE r.tenant_id = ? AND ${yearExpr} = ? AND r.source_type = 'client_payment'
-     GROUP BY r.payer_name
-     ORDER BY total DESC
-     LIMIT 1`,
+     WHERE r.tenant_id = ? AND ${yearExpr} = ?
+     GROUP BY r.source_type, r.payer_name
+     ORDER BY total DESC`,
     [tenantId, reportYear]
   );
+  const topClient = topClientRows.find((row) => normalizeIncomeSourceType(row.source_type) === 'client_payment') ?? null;
 
   const splitsByReceipt = new Map<number, typeof splits>();
   for (const split of splits) {
@@ -232,7 +247,7 @@ export async function getIncomeOverview(tenantId: string, year?: string) {
       split_kate: splitByEntity.kate,
       split_big_picture: splitByEntity.big_picture,
       split_total_pct: splitByEntity.chris + splitByEntity.kate + splitByEntity.big_picture,
-      sourceLabel: INCOME_SOURCE_LABELS[receipt.source_type],
+      sourceLabel: INCOME_SOURCE_LABELS[normalizeIncomeSourceType(receipt.source_type)],
       splitSummary:
         receiptSplits.length === 0
           ? 'Unallocated'
@@ -252,7 +267,7 @@ export async function getIncomeOverview(tenantId: string, year?: string) {
   return {
     reportYear,
     receipts: enrichedReceipts,
-    sourceTotals: sourceTotals.map((row) => ({ ...row, label: INCOME_SOURCE_LABELS[row.source_type] })),
+    sourceTotals: sourceTotals.map((row) => ({ ...row, label: INCOME_SOURCE_LABELS[normalizeIncomeSourceType(row.source_type)] })),
     clientProjectPaid,
     stats: {
       totalIncome,

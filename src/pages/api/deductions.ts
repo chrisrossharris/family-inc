@@ -2,9 +2,10 @@ import type { APIRoute } from 'astro';
 import { z } from 'zod';
 import { upsertDeduction } from '@/lib/services/deductions';
 import { resolveSession } from '@/lib/auth/session';
+import { entityExists } from '@/lib/services/finance-entities';
 
 const bodySchema = z.object({
-  entity: z.enum(['chris', 'kate', 'big_picture']),
+  entity: z.string().min(1),
   type: z.enum(['home_office', 'mileage', 'phone', 'equipment']),
   payload_json: z.string().min(2)
 });
@@ -25,6 +26,10 @@ export const POST: APIRoute = async ({ request, locals, cookies }) => {
   }
 
   const session = resolveSession(locals, cookies);
+  const validEntity = await entityExists(session.tenantId, parsed.data.entity);
+  if (!validEntity) {
+    return new Response(JSON.stringify({ error: 'Invalid entity' }), { status: 400 });
+  }
   await upsertDeduction(session.tenantId, parsed.data.entity, parsed.data.type, payload);
 
   return new Response(JSON.stringify({ ok: true }), {

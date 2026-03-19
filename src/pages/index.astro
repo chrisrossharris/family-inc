@@ -17,7 +17,8 @@ const vendors = await getTopVendors(tenantId, undefined, 10, selectedYear);
 const income = await getIncomeOverview(tenantId, selectedYear);
 const meta = await getImportAuditMeta(tenantId, selectedYear);
 const counts = await getSystemCounts(tenantId, selectedYear);
-const monthlyTotals = monthly.map((m) => m.chris + m.kate + m.big_picture);
+const entityCodes = kpis.map((kpi) => kpi.entity);
+const monthlyTotals = monthly.map((m) => entityCodes.reduce((sum, code) => sum + (m.totals[code] ?? 0), 0));
 const totalSpend = kpis.reduce((sum, kpi) => sum + kpi.totalSpend, 0);
 const netAfterSpend = income.stats.totalIncome - totalSpend;
 const imported = params.get('imported') === '1';
@@ -34,11 +35,11 @@ const vendorUpdates = Number(params.get('vendorUpdates') ?? '0');
     </div>
   )}
 
-  <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+  <section class="kpi-grid md:grid-cols-3 xl:grid-cols-5">
     {kpis.map((kpi) => (
-      <article class="panel">
+      <article class="kpi-card">
         <p class="panel-title">{kpi.label}</p>
-        <p class="mono-num mt-3 text-2xl text-ink">{formatCurrency(kpi.totalSpend)}</p>
+        <p class="kpi-value">{formatCurrency(kpi.totalSpend)}</p>
         <dl class="mt-4 space-y-1 text-xs">
           <div class="flex justify-between"><dt>Avg Monthly Burn</dt><dd class="mono-num">{formatCurrency(kpi.avgMonthlyBurn)}</dd></div>
           <div class="flex justify-between"><dt>Top Category</dt><dd class="max-w-[60%] truncate text-right">{kpi.topCategory}</dd></div>
@@ -58,15 +59,16 @@ const vendorUpdates = Number(params.get('vendorUpdates') ?? '0');
       </div>
       <table class="table-report mt-4 w-full">
         <thead>
-          <tr><th>Month</th><th class="text-right">Chris</th><th class="text-right">Kate</th><th class="text-right">Big Picture</th></tr>
+          <tr>
+            <th>Month</th>
+            {kpis.map((kpi) => <th class="text-right">{kpi.label}</th>)}
+          </tr>
         </thead>
         <tbody>
           {monthly.map((row) => (
             <tr>
               <td>{formatMonthLabel(row.month)}</td>
-              <td class="mono-num">{formatCurrency(row.chris)}</td>
-              <td class="mono-num">{formatCurrency(row.kate)}</td>
-              <td class="mono-num">{formatCurrency(row.big_picture)}</td>
+              {kpis.map((kpi) => <td class="mono-num">{formatCurrency(row.totals[kpi.entity] ?? 0)}</td>)}
             </tr>
           ))}
         </tbody>

@@ -2,23 +2,52 @@ import db from '@/lib/db/connection';
 import { sqlMonthExpr, sqlYearExpr } from '@/lib/db/sql-dialect';
 import { ENTITY_LABELS } from '@/lib/constants';
 import { DEFAULT_REPORT_YEAR, normalizeReportYear } from '@/lib/utils/year';
-import type { Entity, ScheduleCCategory, Transaction } from '@/lib/types';
+import type { ScheduleCCategory, Transaction } from '@/lib/types';
 
 function yearParam(year?: string): string {
   return normalizeReportYear(year ?? DEFAULT_REPORT_YEAR);
 }
 
-export async function getAvailableYears(tenantId: string) {
-  const yearExpr = sqlYearExpr('date');
-  const rows = await db.all<{ year: string }>(
-    `SELECT DISTINCT ${yearExpr} AS year
-     FROM transactions
-     WHERE tenant_id = ? AND date IS NOT NULL
-     ORDER BY year DESC`,
+async function getActiveEntityOptions(tenantId: string) {
+  const rows = await db.all<{ code: string; name: string }>(
+    `SELECT code, name
+     FROM finance_entities
+     WHERE tenant_id = ? AND is_active = 1
+     ORDER BY is_default DESC, kind ASC, name ASC`,
     [tenantId]
   );
+  if (rows.length > 0) return rows;
 
-  const years = rows.map((row) => row.year).filter(Boolean);
+  return db.all<{ code: string; name: string }>(
+    `SELECT DISTINCT entity AS code, entity AS name
+     FROM transactions
+     WHERE tenant_id = ? AND TRIM(COALESCE(entity, '')) <> ''
+     ORDER BY entity ASC`,
+    [tenantId]
+  );
+}
+
+export async function getAvailableYears(tenantId: string) {
+  const txYearExpr = sqlYearExpr('date');
+  const [txRows, billRows] = await Promise.all([
+    db.all<{ year: string }>(
+      `SELECT DISTINCT ${txYearExpr} AS year
+       FROM transactions
+       WHERE tenant_id = ? AND date IS NOT NULL`,
+      [tenantId]
+    ),
+    db.all<{ year: string }>(
+      `SELECT DISTINCT substr(bill_month, 1, 4) AS year
+       FROM energy_bills
+       WHERE tenant_id = ? AND bill_month IS NOT NULL`,
+      [tenantId]
+    )
+  ]);
+
+  const years = [...txRows, ...billRows]
+    .map((row) => row.year)
+    .filter(Boolean)
+    .sort((a, b) => b.localeCompare(a));
   if (!years.includes(DEFAULT_REPORT_YEAR)) years.unshift(DEFAULT_REPORT_YEAR);
   return Array.from(new Set(years));
 }
@@ -26,10 +55,11 @@ export async function getAvailableYears(tenantId: string) {
 export async function getKpisByEntity(tenantId: string, year?: string) {
   const reportYear = yearParam(year);
   const yearExpr = sqlYearExpr('date');
-  const entities = Object.keys(ENTITY_LABELS) as Entity[];
+  const entities = await getActiveEntityOptions(tenantId);
 
   return Promise.all(
-    entities.map(async (entity) => {
+    entities.map(async (entityMeta) => {
+      const entityCode = entityMeta.code;
       const totals =
         (await db.get<{ spend: number; refunds: number; needs_review: number }>(
           `SELECT
@@ -38,7 +68,7 @@ export async function getKpisByEntity(tenantId: string, year?: string) {
             COALESCE(COUNT(CASE WHEN category = 'Other Business Expense (Needs Review)' THEN 1 END), 0) AS needs_review
            FROM transactions
            WHERE tenant_id = ? AND entity = ? AND ${yearExpr} = ?`,
-          [tenantId, entity, reportYear]
+          [tenantId, entityCode, reportYear]
         )) ?? { spend: 0, refunds: 0, needs_review: 0 };
 
       const topCategory = await db.get<{ category: ScheduleCCategory; total: number }>(
@@ -48,7 +78,7 @@ export async function getKpisByEntity(tenantId: string, year?: string) {
          GROUP BY category
          ORDER BY total DESC
          LIMIT 1`,
-        [tenantId, entity, reportYear]
+        [tenantId, entityCode, reportYear]
       );
 
       const topVendor = await db.get<{ vendor: string; total: number }>(
@@ -58,7 +88,7 @@ export async function getKpisByEntity(tenantId: string, year?: string) {
          GROUP BY vendor
          ORDER BY total DESC
          LIMIT 1`,
-        [tenantId, entity, reportYear]
+        [tenantId, entityCode, reportYear]
       );
 
       const monthExpr = sqlMonthExpr('date');
@@ -68,14 +98,14 @@ export async function getKpisByEntity(tenantId: string, year?: string) {
          WHERE tenant_id = ? AND entity = ? AND ${yearExpr} = ?
          GROUP BY month
          ORDER BY month ASC`,
-        [tenantId, entity, reportYear]
+        [tenantId, entityCode, reportYear]
       );
 
       const avgMonthlyBurn = monthly.length > 0 ? monthly.reduce((acc, row) => acc + row.total, 0) / monthly.length : 0;
 
       return {
-        entity,
-        label: ENTITY_LABELS[entity],
+        entity: entityCode,
+        label: entityMeta.name || ENTITY_LABELS[entityCode] || entityCode,
         totalSpend: totals.spend,
         refunds: totals.refunds,
         avgMonthlyBurn,
@@ -91,7 +121,7 @@ export async function getMonthlyStacked(tenantId: string, year?: string) {
   const reportYear = yearParam(year);
   const monthExpr = sqlMonthExpr('date');
   const yearExpr = sqlYearExpr('date');
-  const rows = await db.all<{ month: string; entity: Entity; total: number }>(
+  const rows = await db.all<{ month: string; entity: string; total: number }>(
     `SELECT ${monthExpr} AS month, entity, SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) AS total
      FROM transactions
      WHERE tenant_id = ? AND ${yearExpr} = ?
@@ -100,19 +130,17 @@ export async function getMonthlyStacked(tenantId: string, year?: string) {
     [tenantId, reportYear]
   );
 
-  const byMonth = new Map<string, Record<Entity, number>>();
-
+  const byMonth = new Map<string, Record<string, number>>();
   for (const row of rows) {
-    if (!byMonth.has(row.month)) {
-      byMonth.set(row.month, { chris: 0, kate: 0, big_picture: 0 });
-    }
-    byMonth.get(row.month)![row.entity] = row.total;
+    const current = byMonth.get(row.month) ?? {};
+    current[row.entity] = row.total;
+    byMonth.set(row.month, current);
   }
 
-  return Array.from(byMonth.entries()).map(([month, totals]) => ({ month, ...totals }));
+  return Array.from(byMonth.entries()).map(([month, totals]) => ({ month, totals }));
 }
 
-export async function getCategoryDistribution(tenantId: string, entity?: Entity, year?: string) {
+export async function getCategoryDistribution(tenantId: string, entity?: string, year?: string) {
   const reportYear = yearParam(year);
   const yearExpr = sqlYearExpr('date');
   const sql = entity
@@ -124,7 +152,7 @@ export async function getCategoryDistribution(tenantId: string, entity?: Entity,
     : db.all<{ category: string; total: number }>(sql, [tenantId, reportYear]);
 }
 
-export async function getTopVendors(tenantId: string, entity?: Entity, limit = 10, year?: string) {
+export async function getTopVendors(tenantId: string, entity?: string, limit = 10, year?: string) {
   const reportYear = yearParam(year);
   const yearExpr = sqlYearExpr('date');
   const sql = entity
@@ -136,7 +164,7 @@ export async function getTopVendors(tenantId: string, entity?: Entity, limit = 1
     : db.all<{ vendor: string; total: number }>(sql, [tenantId, reportYear, limit]);
 }
 
-export async function getEntityLedger(tenantId: string, entity: Entity, filters?: { category?: string; vendor?: string; confidence?: string }, year?: string) {
+export async function getEntityLedger(tenantId: string, entity: string, filters?: { category?: string; vendor?: string; confidence?: string }, year?: string) {
   const reportYear = yearParam(year);
   const yearExpr = sqlYearExpr('date');
   const clauses = ['tenant_id = ?', 'entity = ?', `${yearExpr} = ?`];

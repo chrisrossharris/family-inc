@@ -1,0 +1,53 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { PLAN_SPECS, getTenantBilling, hasPremiumAccess } from '@/lib/services/billing';
+
+const tenantId = Astro.locals.tenantId;
+const billing = await getTenantBilling(tenantId);
+const saved = Astro.url.searchParams.get('saved');
+const premium = hasPremiumAccess(billing);
+---
+
+<BaseLayout title="Pricing & Billing" subtitle="Manage your Family Inc plan, subscription status, and billing portal.">
+  {saved && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Status: {saved}</div>}
+
+  <section class="grid gap-4 md:grid-cols-4">
+    <article class="panel"><p class="panel-title">Current Plan</p><p class="mt-2 text-xl uppercase tracking-report">{billing.plan_key}</p></article>
+    <article class="panel"><p class="panel-title">Subscription Status</p><p class="mt-2 text-xl uppercase tracking-report">{billing.subscription_status}</p></article>
+    <article class="panel"><p class="panel-title">Premium Access</p><p class:list={['mt-2 text-xl uppercase tracking-report', premium ? 'text-emerald-700' : 'text-amber-900']}>{premium ? 'Enabled' : 'Starter'}</p></article>
+    <article class="panel"><p class="panel-title">Cancel At Period End</p><p class="mt-2 text-xl uppercase tracking-report">{billing.cancel_at_period_end ? 'Yes' : 'No'}</p></article>
+  </section>
+
+  <section class="mt-4 grid gap-4 lg:grid-cols-3">
+    {PLAN_SPECS.map((plan) => (
+      <article class="panel">
+        <p class="panel-title">{plan.name}</p>
+        <p class="mt-2 text-xl">{plan.monthlyLabel}</p>
+        <p class="mt-1 text-xs text-muted">{plan.description}</p>
+        <ul class="mt-3 space-y-1 text-xs">
+          {plan.features.map((feature) => <li>• {feature}</li>)}
+        </ul>
+        <div class="mt-4">
+          {plan.key === 'starter' ? (
+            <span class="border border-grid px-3 py-2 text-xs uppercase tracking-report">Included</span>
+          ) : (
+            <form method="post" action="/api/billing/create-subscription-checkout">
+              <input type="hidden" name="plan" value={plan.key} />
+              <button type="submit" class="w-full border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">
+                {billing.plan_key === plan.key ? 'Manage Current Plan' : `Choose ${plan.name}`}
+              </button>
+            </form>
+          )}
+        </div>
+      </article>
+    ))}
+  </section>
+
+  <section class="panel mt-4">
+    <h2 class="panel-title">Billing Portal</h2>
+    <p class="mt-2 text-xs text-muted">Use Stripe billing portal to update card, cancel, or change your subscription.</p>
+    <form method="post" action="/api/billing/create-portal" class="mt-3">
+      <button type="submit" class="border border-grid px-3 py-2 text-xs uppercase tracking-report hover:bg-ink hover:text-paper">Open Billing Portal</button>
+    </form>
+  </section>
+</BaseLayout>

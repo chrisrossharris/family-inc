@@ -25,7 +25,6 @@ export interface TenantHealthRow {
   unexpectedMembershipRoleCount: number;
 }
 
-const VALID_ENTITIES = ['chris', 'kate', 'big_picture'];
 const VALID_CONFIDENCE = ['high', 'medium', 'low'];
 const VALID_MEMBERSHIP_ROLES = ['owner', 'admin', 'editor', 'viewer'];
 
@@ -82,9 +81,16 @@ export async function getTenantHealthForUser(userId: string): Promise<TenantHeal
       db.get<{ date: string | null }>('SELECT date FROM transactions WHERE tenant_id = ? ORDER BY date DESC LIMIT 1', [tenantId]),
       db.get<{ count: number }>(
         `SELECT COUNT(*) AS count
-         FROM transactions
-         WHERE tenant_id = ? AND entity NOT IN (${VALID_ENTITIES.map(() => '?').join(',')})`,
-        [tenantId, ...VALID_ENTITIES]
+         FROM transactions t
+         WHERE t.tenant_id = ?
+           AND NOT EXISTS (
+             SELECT 1
+             FROM finance_entities e
+             WHERE e.tenant_id = t.tenant_id
+               AND e.code = t.entity
+               AND e.is_active = 1
+           )`,
+        [tenantId]
       ),
       db.get<{ count: number }>(
         `SELECT COUNT(*) AS count

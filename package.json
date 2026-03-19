@@ -8,6 +8,9 @@
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check",
+    "env:check": "node --import tsx/esm src/tests/deploy-smoke.ts",
+    "smoke:deploy": "node --import tsx/esm src/tests/deploy-smoke.ts",
+    "test:tenant-isolation": "node --import tsx/esm src/tests/tenant-isolation.ts",
     "db:seed": "tsx src/lib/db/seed.ts",
     "db:migrate": "node --import tsx/esm src/lib/db/migrate.ts"
   },
@@ -21,6 +24,7 @@
     "pg": "^8.18.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "stripe": "^18.4.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {

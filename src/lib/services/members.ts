@@ -54,3 +54,20 @@ export async function countOwners(tenantId: string) {
 export async function updateMemberRole(tenantId: string, userId: string, role: string) {
   await db.run('UPDATE memberships SET role = ? WHERE tenant_id = ? AND user_id = ?', [role, tenantId, userId]);
 }
+
+export async function removeMember(tenantId: string, userId: string) {
+  await db.transaction(async (tx) => {
+    await tx.run('DELETE FROM memberships WHERE tenant_id = ? AND user_id = ?', [tenantId, userId]);
+    await tx.run(
+      `UPDATE finance_entities
+       SET owner_user_id = NULL,
+           is_active = 0,
+           is_default = 0,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE tenant_id = ?
+         AND owner_user_id = ?
+         AND kind = 'person'`,
+      [tenantId, userId]
+    );
+  });
+}

@@ -4,14 +4,23 @@ import { getNeedsReviewTransactions } from '@/lib/services/reports';
 import { formatCurrency } from '@/lib/utils/format';
 import { SCHEDULE_C_CATEGORIES } from '@/lib/constants';
 import { normalizeReportYear } from '@/lib/utils/year';
+import { listFinanceEntityOptions } from '@/lib/services/finance-entities';
 
 const tenantId = Astro.locals.tenantId;
 const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
 const rows = await getNeedsReviewTransactions(tenantId, selectedYear);
+const entities = await listFinanceEntityOptions(tenantId);
 const updatedRows = Astro.url.searchParams.get('updated');
+const ruleSaved = Astro.url.searchParams.get('ruleSaved') === '1';
+const ruleUpdatedRows = Astro.url.searchParams.get('updatedRows');
 ---
 
 <BaseLayout title="Needs Review" subtitle="Audit mode for uncategorized / low-confidence transactions.">
+  {ruleSaved && (
+    <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">
+      Vendor rule saved. Retroactively updated {ruleUpdatedRows ?? '0'} transaction{ruleUpdatedRows === '1' ? '' : 's'}.
+    </div>
+  )}
   {updatedRows && (
     <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">
       Updated {updatedRows} transaction{updatedRows === '1' ? '' : 's'}.
@@ -23,7 +32,9 @@ const updatedRows = Astro.url.searchParams.get('updated');
     <form method="post" action="/api/rules" class="mt-3 grid gap-3 md:grid-cols-3">
       <select name="match_type"><option value="contains">contains</option><option value="exact">exact</option><option value="regex">regex</option></select>
       <input type="text" name="match_value" required placeholder="vendor pattern" />
-      <select name="entity"><option value="chris">Chris</option><option value="kate">Kate</option><option value="big_picture" selected>Big Picture</option></select>
+      <select name="entity">
+        {entities.map((entity) => <option value={entity.code} selected={entity.isDefault}>{entity.label}</option>)}
+      </select>
       <select name="category" class="md:col-span-2">{SCHEDULE_C_CATEGORIES.map((cat) => <option value={cat}>{cat}</option>)}</select>
       <label class="inline-flex items-center gap-2 text-sm"><input type="checkbox" name="deductible_flag" value="1" checked /> Deductible</label>
       <input type="hidden" name="apply_retroactively" value="1" />
@@ -64,9 +75,7 @@ const updatedRows = Astro.url.searchParams.get('updated');
               <td class="mono-num">{formatCurrency(row.amount)}</td>
               <td>
                 <select name={`entity_${row.id}`} class="text-xs" aria-label={`Set entity for transaction ${row.id}`}>
-                  <option value="chris" selected={row.entity === 'chris'}>Chris</option>
-                  <option value="kate" selected={row.entity === 'kate'}>Kate</option>
-                  <option value="big_picture" selected={row.entity === 'big_picture'}>Big Picture</option>
+                  {entities.map((entity) => <option value={entity.code} selected={row.entity === entity.code}>{entity.label}</option>)}
                 </select>
               </td>
               <td>

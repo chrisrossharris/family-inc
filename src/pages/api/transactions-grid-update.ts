@@ -2,8 +2,8 @@ import type { APIRoute } from 'astro';
 import db from '@/lib/db/connection';
 import { resolveSession } from '@/lib/auth/session';
 import { SCHEDULE_C_CATEGORIES } from '@/lib/constants';
+import { listFinanceEntityOptions } from '@/lib/services/finance-entities';
 
-const VALID_ENTITIES = new Set(['chris', 'kate', 'big_picture']);
 const VALID_CATEGORIES = new Set(SCHEDULE_C_CATEGORIES);
 
 export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => {
@@ -19,6 +19,7 @@ export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => 
   }
 
   const session = resolveSession(locals, cookies);
+  const validEntities = new Set((await listFinanceEntityOptions(session.tenantId)).map((entity) => entity.code));
   let updated = 0;
 
   await db.transaction(async (tx) => {
@@ -28,7 +29,7 @@ export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => 
       const category = String(form.get(`category_${id}`) ?? '').trim();
       const entity = String(form.get(`entity_${id}`) ?? '').trim();
 
-      if (!vendor || !category || !VALID_ENTITIES.has(entity) || !VALID_CATEGORIES.has(category as (typeof SCHEDULE_C_CATEGORIES)[number])) continue;
+      if (!vendor || !category || !validEntities.has(entity) || !VALID_CATEGORIES.has(category as (typeof SCHEDULE_C_CATEGORIES)[number])) continue;
 
       const result = await tx.run(
         `UPDATE transactions

@@ -1,5 +1,5 @@
 export const ENTITIES = ['chris', 'kate', 'big_picture'] as const;
-export type Entity = (typeof ENTITIES)[number];
+export type Entity = string;
 
 export const CONFIDENCE_LEVELS = ['high', 'medium', 'low'] as const;
 export type Confidence = (typeof CONFIDENCE_LEVELS)[number];
@@ -7,7 +7,7 @@ export type Confidence = (typeof CONFIDENCE_LEVELS)[number];
 export type MatchType = 'exact' | 'contains' | 'regex';
 
 export type DeductionType = 'home_office' | 'mileage' | 'phone' | 'equipment';
-export type IncomeSourceType = 'client_payment' | 'gift' | 'unemployment' | 'food_stamps' | 'other';
+export type IncomeSourceType = 'client_payment' | 'gift' | 'unemployment' | 'food_stamps' | 'interest' | 'other';
 
 export type ScheduleCCategory =
   | 'Advertising & Marketing (Lead Gen)'
@@ -27,7 +27,7 @@ export interface Transaction {
   amount: number;
   description: string;
   account: string;
-  entity: Entity;
+  entity: string;
   category: ScheduleCCategory;
   deductible_flag: 0 | 1;
   confidence: Confidence;
@@ -40,7 +40,7 @@ export interface VendorRule {
   id: number;
   match_type: MatchType;
   match_value: string;
-  entity: Entity;
+  entity: string;
   category: ScheduleCCategory;
   deductible_flag: 0 | 1;
   notes: string | null;

@@ -3,11 +3,12 @@ import { z } from 'zod';
 import db from '@/lib/db/connection';
 import { resolveSession } from '@/lib/auth/session';
 import { SCHEDULE_C_CATEGORIES } from '@/lib/constants';
+import { entityExists } from '@/lib/services/finance-entities';
 
 const bodySchema = z.object({
   ids: z.string().min(1),
   category: z.string().min(1).optional(),
-  entity: z.enum(['chris', 'kate', 'big_picture']).optional(),
+  entity: z.string().min(1).optional(),
   vendor: z.string().min(1).optional(),
   description: z.string().optional()
 });
@@ -42,6 +43,10 @@ export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => 
   }
 
   if (parsed.data.entity) {
+    const validEntity = await entityExists(session.tenantId, parsed.data.entity);
+    if (!validEntity) {
+      return new Response(JSON.stringify({ error: 'Invalid entity' }), { status: 400 });
+    }
     updates.push('entity = ?');
     params.push(parsed.data.entity);
   }

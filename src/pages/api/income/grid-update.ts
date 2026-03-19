@@ -2,7 +2,8 @@ import type { APIRoute } from 'astro';
 import { resolveSession } from '@/lib/auth/session';
 import { updateIncomeReceipt } from '@/lib/services/income';
 
-const VALID_SOURCE_TYPES = new Set(['client_payment', 'gift', 'unemployment', 'food_stamps', 'other']);
+const VALID_SOURCE_TYPES = new Set(['client_payment', 'gift', 'unemployment', 'food_stamps', 'interest', 'other']);
+const VALID_ALLOCATION_ENTITIES = new Set(['chris', 'kate', 'big_picture']);
 
 export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => {
   const form = await request.formData();
@@ -26,26 +27,17 @@ export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => 
     const payerName = String(form.get(`payer_name_${id}`) ?? '').trim();
     const projectName = String(form.get(`project_name_${id}`) ?? '').trim();
     const notes = String(form.get(`notes_${id}`) ?? '').trim();
+    const allocationEntity = String(form.get(`allocation_entity_${id}`) ?? '').trim();
     const grossAmount = Number(form.get(`gross_amount_${id}`) ?? NaN);
-    const splitChris = Number(form.get(`split_chris_${id}`) ?? NaN);
-    const splitKate = Number(form.get(`split_kate_${id}`) ?? NaN);
-    const splitBigPicture = Number(form.get(`split_big_picture_${id}`) ?? NaN);
-
-    const splitTotal = splitChris + splitKate + splitBigPicture;
+    const selectedEntity = VALID_ALLOCATION_ENTITIES.has(allocationEntity) ? allocationEntity : 'big_picture';
+    const splitChris = selectedEntity === 'chris' ? 100 : 0;
+    const splitKate = selectedEntity === 'kate' ? 100 : 0;
+    const splitBigPicture = selectedEntity === 'big_picture' ? 100 : 0;
     const valid =
       receivedDate.length >= 10 &&
-      VALID_SOURCE_TYPES.has(sourceType) &&
       payerName.length > 0 &&
       Number.isFinite(grossAmount) &&
-      grossAmount > 0 &&
-      Number.isFinite(splitChris) &&
-      Number.isFinite(splitKate) &&
-      Number.isFinite(splitBigPicture) &&
-      splitTotal > 0 &&
-      splitTotal <= 100 &&
-      splitChris >= 0 &&
-      splitKate >= 0 &&
-      splitBigPicture >= 0;
+      grossAmount > 0;
 
     if (!valid) {
       invalid += 1;
@@ -56,7 +48,13 @@ export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => 
       tenantId: session.tenantId,
       id,
       receivedDate,
-      sourceType: sourceType as 'client_payment' | 'gift' | 'unemployment' | 'food_stamps' | 'other',
+      sourceType: (VALID_SOURCE_TYPES.has(sourceType) ? sourceType : 'other') as
+        | 'client_payment'
+        | 'gift'
+        | 'unemployment'
+        | 'food_stamps'
+        | 'interest'
+        | 'other',
       payerName,
       projectName: projectName || null,
       grossAmount,

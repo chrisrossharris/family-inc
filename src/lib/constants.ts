@@ -1,6 +1,6 @@
-import type { Entity, IncomeSourceType, ScheduleCCategory } from './types';
+import type { IncomeSourceType, ScheduleCCategory } from './types';
 
-export const DEFAULT_ENTITY: Entity = 'big_picture';
+export const DEFAULT_ENTITY = 'big_picture';
 
 export const SCHEDULE_C_CATEGORIES: ScheduleCCategory[] = [
   'Advertising & Marketing (Lead Gen)',
@@ -14,7 +14,7 @@ export const SCHEDULE_C_CATEGORIES: ScheduleCCategory[] = [
   'Other Business Expense (Needs Review)'
 ];
 
-export const ENTITY_LABELS: Record<Entity, string> = {
+export const ENTITY_LABELS: Record<string, string> = {
   chris: 'Chris',
   kate: 'Kate',
   big_picture: 'Big Picture'
@@ -25,6 +25,7 @@ export const INCOME_SOURCE_LABELS: Record<IncomeSourceType, string> = {
   gift: 'Gift',
   unemployment: 'Unemployment',
   food_stamps: 'Food Stamps',
+  interest: 'Interest',
   other: 'Other'
 };
 

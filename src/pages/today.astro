@@ -1,0 +1,137 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { normalizeReportYear } from '@/lib/utils/year';
+import { getTodayBriefForUser } from '@/lib/services/today';
+
+const tenantId = Astro.locals.tenantId;
+const userId = Astro.locals.userId;
+const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
+const saved = Astro.url.searchParams.get('saved');
+const brief = await getTodayBriefForUser(tenantId, userId, selectedYear);
+const mutedItems = brief.attention.filter((item) => item.value > 0 && item.suppressed);
+---
+
+<BaseLayout title="Today" subtitle="Daily parent-operator cockpit across finance, health, children, and household execution.">
+  {saved && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Saved: {saved}</div>}
+  <section class="grid gap-4 md:grid-cols-3">
+    <article class="panel">
+      <p class="panel-title">Attention Score</p>
+      <p class:list={['mono-num mt-2 text-4xl', brief.riskBand === 'critical' ? 'text-red-700' : brief.riskBand === 'watch' ? 'text-amber-900' : 'text-emerald-700']}>
+        {brief.score}
+      </p>
+      <p class="mt-1 text-xs text-muted">Band: {brief.riskBand}</p>
+    </article>
+    <article class="panel">
+      <p class="panel-title">Overdue Invoices</p>
+      <p class:list={['mono-num mt-2 text-3xl', brief.snapshot.overdueInvoices > 0 ? 'text-red-700' : 'text-emerald-700']}>{brief.snapshot.overdueInvoices}</p>
+      <a href={`/invoices?year=${selectedYear}`} class="mt-2 inline-block border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Open Invoices</a>
+    </article>
+    <article class="panel">
+      <p class="panel-title">Needs Review + Unallocated Income</p>
+      <p class:list={['mono-num mt-2 text-3xl', brief.snapshot.needsReview + brief.snapshot.unallocatedIncome > 0 ? 'text-amber-900' : 'text-emerald-700']}>
+        {brief.snapshot.needsReview + brief.snapshot.unallocatedIncome}
+      </p>
+      <p class="mt-1 text-xs text-muted">Review spend + allocate income splits.</p>
+    </article>
+  </section>
+
+  <section class="mt-4 grid gap-4 lg:grid-cols-2">
+    <article class="panel">
+      <h2 class="panel-title">Action Queue</h2>
+      <table class="table-report mt-3 w-full">
+        <thead><tr><th>Priority</th><th>Item</th><th class="text-right">Count</th><th>Action</th></tr></thead>
+        <tbody>
+          {brief.queue.length === 0 && <tr><td colspan="4" class="text-xs text-muted">No urgent items. System is stable today.</td></tr>}
+          {brief.queue.map((item) => (
+            <tr>
+              <td class="mono-num">{item.points}</td>
+              <td>
+                <div>{item.label}</div>
+                <div class="text-[10px] text-muted">{item.detail}</div>
+              </td>
+              <td class="mono-num">{item.value}</td>
+              <td>
+                <div class="flex gap-1">
+                  <a href={`${item.href}?year=${selectedYear}`} class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Open</a>
+                  <form method="post" action="/api/today/action">
+                    <input type="hidden" name="year" value={selectedYear} />
+                    <input type="hidden" name="action_id" value={item.id} />
+                    <button type="submit" name="op" value="done" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Done</button>
+                  </form>
+                  <form method="post" action="/api/today/action">
+                    <input type="hidden" name="year" value={selectedYear} />
+                    <input type="hidden" name="action_id" value={item.id} />
+                    <button type="submit" name="op" value="snooze_1d" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">+1d</button>
+                  </form>
+                  <form method="post" action="/api/today/action">
+                    <input type="hidden" name="year" value={selectedYear} />
+                    <input type="hidden" name="action_id" value={item.id} />
+                    <button type="submit" name="op" value="snooze_3d" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">+3d</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {brief.mutedCount > 0 && <p class="mt-2 text-xs text-muted">{brief.mutedCount} queue item(s) currently done/snoozed.</p>}
+    </article>
+
+    <article class="panel">
+      <h2 class="panel-title">Cross-Pillar Checks</h2>
+      <table class="table-report mt-3 w-full">
+        <thead><tr><th>Check</th><th>Status</th><th class="text-right">Value</th></tr></thead>
+        <tbody>
+          {brief.attention.map((item) => (
+            <tr>
+              <td>{item.label}</td>
+              <td>{item.value > 0 ? 'Attention' : 'OK'}</td>
+              <td class:list={['mono-num', item.value > 0 ? 'text-amber-900' : 'text-emerald-700']}>{item.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <details class="form-card mt-4">
+        <summary>Tune Priority Weights</summary>
+        <form method="post" action="/api/today/preferences" class="mt-3 grid gap-2 md:grid-cols-2">
+          <input type="hidden" name="year" value={selectedYear} />
+          <label class="text-xs">Needs Review <input class="mt-1 w-full" type="number" min="0.4" max="2.5" step="0.1" name="needs_review" value={brief.weights['needs-review']} /></label>
+          <label class="text-xs">Income Unallocated <input class="mt-1 w-full" type="number" min="0.4" max="2.5" step="0.1" name="income_unallocated" value={brief.weights['income-unallocated']} /></label>
+          <label class="text-xs">Invoices Overdue <input class="mt-1 w-full" type="number" min="0.4" max="2.5" step="0.1" name="invoices_overdue" value={brief.weights['invoices-overdue']} /></label>
+          <label class="text-xs">Health High Severity <input class="mt-1 w-full" type="number" min="0.4" max="2.5" step="0.1" name="health_high_severity" value={brief.weights['health-high-severity']} /></label>
+          <label class="text-xs">Health Appointments <input class="mt-1 w-full" type="number" min="0.4" max="2.5" step="0.1" name="health_appointments" value={brief.weights['health-appointments']} /></label>
+          <label class="text-xs">Children Goals <input class="mt-1 w-full" type="number" min="0.4" max="2.5" step="0.1" name="children_goals" value={brief.weights['children-goals']} /></label>
+          <label class="text-xs">Family Goals Overdue <input class="mt-1 w-full" type="number" min="0.4" max="2.5" step="0.1" name="family_goals_overdue" value={brief.weights['family-goals-overdue']} /></label>
+          <label class="text-xs">Trips Unpacked <input class="mt-1 w-full" type="number" min="0.4" max="2.5" step="0.1" name="trips_unpacked" value={brief.weights['trips-unpacked']} /></label>
+          <label class="text-xs md:col-span-2">Grocery Needed <input class="mt-1 w-full" type="number" min="0.4" max="2.5" step="0.1" name="grocery_needed" value={brief.weights['grocery-needed']} /></label>
+          <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Weights</button>
+        </form>
+      </details>
+    </article>
+  </section>
+
+  {mutedItems.length > 0 && (
+    <section class="panel mt-4">
+      <h2 class="panel-title">Muted Items</h2>
+      <p class="mt-2 text-xs text-muted">Items marked done or snoozed. Clear to return them to the active queue.</p>
+      <table class="table-report mt-3 w-full">
+        <thead><tr><th>Item</th><th class="text-right">Count</th><th>Action</th></tr></thead>
+        <tbody>
+          {mutedItems.map((item) => (
+            <tr>
+              <td>{item.label}</td>
+              <td class="mono-num">{item.value}</td>
+              <td>
+                <form method="post" action="/api/today/action">
+                  <input type="hidden" name="year" value={selectedYear} />
+                  <input type="hidden" name="action_id" value={item.id} />
+                  <button type="submit" name="op" value="clear" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Clear</button>
+                </form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  )}
+</BaseLayout>

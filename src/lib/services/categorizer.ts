@@ -1,5 +1,6 @@
 import db from '@/lib/db/connection';
 import type { Entity, VendorRule } from '@/lib/types';
+import { getDefaultEntityCode } from '@/lib/services/finance-entities';
 
 interface CategorizeInput {
   vendor: string;
@@ -57,8 +58,9 @@ export async function categorizeTransaction(tenantId: string, input: CategorizeI
   }
 
   const likelyRefund = input.amount < 0;
+  const defaultEntity = await getDefaultEntityCode(tenantId);
   return {
-    entity: 'big_picture',
+    entity: defaultEntity,
     category: 'Other Business Expense (Needs Review)',
     deductible_flag: 0,
     confidence: likelyRefund ? 'medium' : 'low',

@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS vendor_rules (
   tenant_id TEXT NOT NULL DEFAULT 'harris_holdings',
   match_type TEXT NOT NULL CHECK (match_type IN ('exact','contains','regex')),
   match_value TEXT NOT NULL,
-  entity TEXT NOT NULL CHECK (entity IN ('chris','kate','big_picture')),
+  entity TEXT NOT NULL,
   category TEXT NOT NULL,
   deductible_flag INTEGER NOT NULL CHECK (deductible_flag IN (0,1)),
   notes TEXT,
@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   amount REAL NOT NULL,
   description TEXT NOT NULL,
   account TEXT NOT NULL,
-  entity TEXT NOT NULL CHECK (entity IN ('chris','kate','big_picture')),
+  entity TEXT NOT NULL,
   category TEXT NOT NULL,
   deductible_flag INTEGER NOT NULL CHECK (deductible_flag IN (0,1)),
   confidence TEXT NOT NULL CHECK (confidence IN ('high','medium','low')),
@@ -100,12 +100,32 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE TABLE IF NOT EXISTS deductions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tenant_id TEXT NOT NULL DEFAULT 'harris_holdings',
-  entity TEXT NOT NULL CHECK (entity IN ('chris','kate','big_picture')),
+  entity TEXT NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('home_office','mileage','phone','equipment')),
   payload_json TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(tenant_id, entity, type)
+);
+
+CREATE TABLE IF NOT EXISTS finance_entities (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  code TEXT NOT NULL,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('person','business')),
+  owner_user_id TEXT,
+  ownership_type TEXT,
+  ownership_percent REAL NOT NULL DEFAULT 100 CHECK (ownership_percent >= 0 AND ownership_percent <= 100),
+  tax_classification TEXT,
+  notes TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0,1)),
+  is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0,1)),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(tenant_id, code),
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(owner_user_id) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS family_members (
@@ -376,11 +396,89 @@ CREATE TABLE IF NOT EXISTS home_grocery_items (
   FOREIGN KEY(tenant_id) REFERENCES tenants(id)
 );
 
+CREATE TABLE IF NOT EXISTS home_grocery_receipts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  store_name TEXT,
+  purchased_on TEXT NOT NULL,
+  total_amount REAL NOT NULL DEFAULT 0,
+  source_type TEXT NOT NULL DEFAULT 'manual' CHECK (source_type IN ('manual','ocr_text','integration')),
+  raw_text TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+);
+
+CREATE TABLE IF NOT EXISTS home_grocery_receipt_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  receipt_id INTEGER NOT NULL,
+  item_name TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'Other',
+  quantity REAL NOT NULL DEFAULT 1,
+  unit_price REAL NOT NULL DEFAULT 0,
+  line_total REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(receipt_id) REFERENCES home_grocery_receipts(id)
+);
+
+CREATE TABLE IF NOT EXISTS energy_profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL UNIQUE,
+  home_sqft REAL,
+  occupants INTEGER,
+  utility_rate_per_kwh REAL,
+  target_monthly_kwh REAL,
+  roof_solar_score INTEGER CHECK (roof_solar_score BETWEEN 1 AND 10),
+  owns_home INTEGER NOT NULL DEFAULT 1,
+  has_solar INTEGER NOT NULL DEFAULT 0,
+  green_utility_plan INTEGER NOT NULL DEFAULT 0,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+);
+
+CREATE TABLE IF NOT EXISTS energy_bills (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  bill_month TEXT NOT NULL,
+  provider_name TEXT NOT NULL,
+  source_type TEXT NOT NULL CHECK (source_type IN ('electricity','gas','water','solar','other')),
+  kwh_used REAL NOT NULL DEFAULT 0,
+  cost_amount REAL NOT NULL DEFAULT 0,
+  peak_kwh REAL NOT NULL DEFAULT 0,
+  off_peak_kwh REAL NOT NULL DEFAULT 0,
+  renewable_pct REAL NOT NULL DEFAULT 0 CHECK (renewable_pct >= 0 AND renewable_pct <= 100),
+  solar_export_kwh REAL NOT NULL DEFAULT 0,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+);
+
+CREATE TABLE IF NOT EXISTS energy_actions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  action_name TEXT NOT NULL,
+  category TEXT NOT NULL CHECK (category IN ('efficiency','solar','renewable','behavior','upgrade')),
+  status TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','in_progress','done','skipped')),
+  priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low','medium','high')),
+  estimated_annual_kwh_savings REAL NOT NULL DEFAULT 0,
+  estimated_annual_cost_savings REAL NOT NULL DEFAULT 0,
+  estimated_upfront_cost REAL NOT NULL DEFAULT 0,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+);
+
 CREATE TABLE IF NOT EXISTS income_receipts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tenant_id TEXT NOT NULL,
   received_date TEXT NOT NULL,
-  source_type TEXT NOT NULL CHECK (source_type IN ('client_payment','gift','unemployment','food_stamps','other')),
+  source_type TEXT NOT NULL CHECK (source_type IN ('client_payment','gift','unemployment','food_stamps','interest','other')),
   payer_name TEXT NOT NULL,
   project_name TEXT,
   gross_amount REAL NOT NULL CHECK (gross_amount >= 0),
@@ -395,12 +493,92 @@ CREATE TABLE IF NOT EXISTS income_splits (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tenant_id TEXT NOT NULL,
   income_receipt_id INTEGER NOT NULL,
-  entity TEXT NOT NULL CHECK (entity IN ('chris','kate','big_picture')),
+  entity TEXT NOT NULL,
   split_percent REAL NOT NULL CHECK (split_percent >= 0 AND split_percent <= 100),
   split_amount REAL NOT NULL CHECK (split_amount >= 0),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(tenant_id) REFERENCES tenants(id),
   FOREIGN KEY(income_receipt_id) REFERENCES income_receipts(id)
+);
+
+CREATE TABLE IF NOT EXISTS invoices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  invoice_number TEXT NOT NULL,
+  client_name TEXT NOT NULL,
+  project_name TEXT,
+  entity TEXT NOT NULL,
+  issued_on TEXT NOT NULL,
+  due_on TEXT NOT NULL,
+  amount_total REAL NOT NULL CHECK (amount_total >= 0),
+  status TEXT NOT NULL CHECK (status IN ('draft','sent','partial','paid','overdue','void')) DEFAULT 'sent',
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(tenant_id, invoice_number),
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+);
+
+CREATE TABLE IF NOT EXISTS invoice_payments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  invoice_id INTEGER NOT NULL,
+  income_receipt_id INTEGER,
+  stripe_payment_intent_id TEXT,
+  received_on TEXT NOT NULL,
+  amount REAL NOT NULL CHECK (amount > 0),
+  method TEXT,
+  reference TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(invoice_id) REFERENCES invoices(id),
+  FOREIGN KEY(income_receipt_id) REFERENCES income_receipts(id)
+);
+
+CREATE TABLE IF NOT EXISTS stripe_webhook_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id TEXT NOT NULL UNIQUE,
+  event_type TEXT NOT NULL,
+  processed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tenant_billing (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL UNIQUE,
+  stripe_customer_id TEXT,
+  stripe_subscription_id TEXT,
+  plan_key TEXT NOT NULL DEFAULT 'starter' CHECK (plan_key IN ('starter','family_plus','family_pro')),
+  subscription_status TEXT NOT NULL DEFAULT 'inactive' CHECK (subscription_status IN ('inactive','trialing','active','past_due','canceled','unpaid','incomplete','incomplete_expired')),
+  current_period_end TEXT,
+  cancel_at_period_end INTEGER NOT NULL DEFAULT 0 CHECK (cancel_at_period_end IN (0,1)),
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+);
+
+CREATE TABLE IF NOT EXISTS today_preferences (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  weights_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(tenant_id, user_id),
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS today_action_states (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  action_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('done','snoozed')),
+  done_on TEXT,
+  snooze_until TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(tenant_id, user_id, action_id),
+  FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+  FOREIGN KEY(user_id) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS family_milestones (
@@ -424,6 +602,8 @@ CREATE INDEX IF NOT EXISTS idx_rules_tenant ON vendor_rules(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_imports_tenant ON imports(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_import_jobs_tenant_status ON import_jobs(tenant_id, status);
 CREATE INDEX IF NOT EXISTS idx_deductions_tenant ON deductions(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_finance_entities_tenant ON finance_entities(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_finance_entities_owner ON finance_entities(tenant_id, owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_invitations_tenant ON invitations(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_family_members_tenant ON family_members(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_health_symptoms_tenant ON health_symptom_logs(tenant_id);
@@ -443,10 +623,22 @@ CREATE INDEX IF NOT EXISTS idx_family_goals_tenant ON family_goals(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_family_trips_tenant ON family_trips(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_family_trip_items_tenant ON family_trip_items(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_home_grocery_items_tenant ON home_grocery_items(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_home_grocery_receipts_tenant_date ON home_grocery_receipts(tenant_id, purchased_on);
+CREATE INDEX IF NOT EXISTS idx_home_grocery_receipt_items_tenant_receipt ON home_grocery_receipt_items(tenant_id, receipt_id);
+CREATE INDEX IF NOT EXISTS idx_energy_profiles_tenant ON energy_profiles(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_energy_bills_tenant_month ON energy_bills(tenant_id, bill_month);
+CREATE INDEX IF NOT EXISTS idx_energy_actions_tenant_status ON energy_actions(tenant_id, status);
 CREATE INDEX IF NOT EXISTS idx_income_receipts_tenant_date ON income_receipts(tenant_id, received_date);
 CREATE INDEX IF NOT EXISTS idx_income_receipts_tenant_source ON income_receipts(tenant_id, source_type);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_income_receipts_tenant_import_hash ON income_receipts(tenant_id, import_hash);
 CREATE INDEX IF NOT EXISTS idx_income_splits_tenant_receipt ON income_splits(tenant_id, income_receipt_id);
 CREATE INDEX IF NOT EXISTS idx_income_splits_tenant_entity ON income_splits(tenant_id, entity);
+CREATE INDEX IF NOT EXISTS idx_invoices_tenant_due ON invoices(tenant_id, due_on);
+CREATE INDEX IF NOT EXISTS idx_invoices_tenant_status ON invoices(tenant_id, status);
+CREATE INDEX IF NOT EXISTS idx_invoice_payments_tenant_invoice ON invoice_payments(tenant_id, invoice_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_invoice_payments_tenant_intent ON invoice_payments(tenant_id, stripe_payment_intent_id);
+CREATE INDEX IF NOT EXISTS idx_tenant_billing_plan ON tenant_billing(plan_key, subscription_status);
+CREATE INDEX IF NOT EXISTS idx_today_preferences_tenant_user ON today_preferences(tenant_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_today_actions_tenant_user ON today_action_states(tenant_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_family_milestones_tenant ON family_milestones(tenant_id);
 `;

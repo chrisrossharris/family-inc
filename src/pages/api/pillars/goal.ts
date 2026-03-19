@@ -2,9 +2,10 @@ import type { APIRoute } from 'astro';
 import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { normalizeReportYear } from '@/lib/utils/year';
-import { addFamilyGoal } from '@/lib/services/pillars';
+import { addFamilyGoal, updateFamilyGoal } from '@/lib/services/pillars';
 
 const schema = z.object({
+  id: z.coerce.number().int().positive().optional(),
   goal_title: z.string().min(1),
   domain: z.string().min(1),
   target_date: z.string().optional(),
@@ -20,6 +21,20 @@ export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => 
 
   const session = resolveSession(locals, cookies);
   const year = normalizeReportYear(parsed.data.year);
+  if (parsed.data.id) {
+    await updateFamilyGoal({
+      tenantId: session.tenantId,
+      id: parsed.data.id,
+      goalTitle: parsed.data.goal_title,
+      domain: parsed.data.domain,
+      targetDate: parsed.data.target_date || null,
+      progressPct: parsed.data.progress_pct,
+      status: parsed.data.status,
+      notes: parsed.data.notes || null
+    });
+    return redirect(`/goals-projects?year=${year}&saved=goal_updated`, 303);
+  }
+
   await addFamilyGoal({
     tenantId: session.tenantId,
     goalTitle: parsed.data.goal_title,
@@ -30,5 +45,5 @@ export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => 
     notes: parsed.data.notes || null
   });
 
-  return redirect(`/goals-projects?year=${year}&saved=goal`, 303);
+  return redirect(`/goals-projects?year=${year}&saved=goal_created`, 303);
 };

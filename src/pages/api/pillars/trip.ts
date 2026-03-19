@@ -2,9 +2,10 @@ import type { APIRoute } from 'astro';
 import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { normalizeReportYear } from '@/lib/utils/year';
-import { addTrip } from '@/lib/services/pillars';
+import { addTrip, updateTrip } from '@/lib/services/pillars';
 
 const schema = z.object({
+  id: z.coerce.number().int().positive().optional(),
   trip_name: z.string().min(1),
   start_date: z.string().min(10),
   end_date: z.string().min(10),
@@ -21,6 +22,21 @@ export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => 
 
   const session = resolveSession(locals, cookies);
   const year = normalizeReportYear(parsed.data.year);
+  if (parsed.data.id) {
+    await updateTrip({
+      tenantId: session.tenantId,
+      tripId: parsed.data.id,
+      tripName: parsed.data.trip_name,
+      startDate: parsed.data.start_date,
+      endDate: parsed.data.end_date,
+      destination: parsed.data.destination || null,
+      budgetAmount: parsed.data.budget_amount,
+      status: parsed.data.status,
+      notes: parsed.data.notes || null
+    });
+    return redirect(`/trips?year=${year}&saved=trip_updated`, 303);
+  }
+
   await addTrip({
     tenantId: session.tenantId,
     tripName: parsed.data.trip_name,
@@ -32,5 +48,5 @@ export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => 
     notes: parsed.data.notes || null
   });
 
-  return redirect(`/trips?year=${year}&saved=trip`, 303);
+  return redirect(`/trips?year=${year}&saved=trip_created`, 303);
 };

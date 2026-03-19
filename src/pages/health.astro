@@ -84,8 +84,8 @@ const memberSnapshots = members.map((member) => {
     </table>
   </section>
 
-  <section class="mt-4 grid gap-4 lg:grid-cols-2">
-    <article class="panel" id="members">
+  <section class="mt-4 grid items-start gap-4 lg:grid-cols-2">
+    <article class="panel min-w-0" id="members">
       <h2 class="panel-title">Family Members</h2>
       <p class="mt-2 text-xs text-muted">{memberCount === 0 ? 'No family members yet. Add your first member.' : `${memberCount} active family member${memberCount === 1 ? '' : 's'}.`}</p>
       <details class="form-card mt-3" open={memberCount === 0}>
@@ -100,37 +100,39 @@ const memberSnapshots = members.map((member) => {
           <button type="submit" class="border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Add Member</button>
         </form>
       </details>
-      <table class="table-report mt-4 w-full">
-        <thead><tr><th>Name</th><th>Relation</th><th>Birth Date</th><th>Notes</th><th>Active</th><th>Edit</th></tr></thead>
-        <tbody>
-          {allMembers.length === 0 && <tr><td colspan="6" class="text-xs text-muted">No members yet.</td></tr>}
-          {allMembers.map((member) => (
-            <tr>
-              <td>
-                <input form={`member-edit-${member.id}`} type="text" name="name" required value={member.name} class="text-xs" />
-              </td>
-              <td>
-                <input form={`member-edit-${member.id}`} type="text" name="relation" required value={member.relation} class="text-xs" />
-              </td>
-              <td>
-                <input form={`member-edit-${member.id}`} type="date" name="birth_date" value={member.birth_date ?? ''} class="text-xs" />
-              </td>
-              <td>
-                <input form={`member-edit-${member.id}`} type="text" name="notes" value={member.notes ?? ''} class="text-xs" />
-              </td>
-              <td>
-                <label class="inline-flex items-center gap-2 text-xs">
-                  <input form={`member-edit-${member.id}`} type="checkbox" name="is_active" value="1" checked={member.is_active === 1} />
-                  {member.is_active === 1 ? 'Yes' : 'No'}
-                </label>
-              </td>
-              <td>
-                <button form={`member-edit-${member.id}`} type="submit" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Save</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div class="overflow-x-auto">
+        <table class="table-report mt-4 w-full min-w-[860px]">
+          <thead><tr><th>Name</th><th>Relation</th><th>Birth Date</th><th>Notes</th><th>Active</th><th>Edit</th></tr></thead>
+          <tbody>
+            {allMembers.length === 0 && <tr><td colspan="6" class="text-xs text-muted">No members yet.</td></tr>}
+            {allMembers.map((member) => (
+              <tr>
+                <td>
+                  <input form={`member-edit-${member.id}`} type="text" name="name" required value={member.name} class="text-xs" />
+                </td>
+                <td>
+                  <input form={`member-edit-${member.id}`} type="text" name="relation" required value={member.relation} class="text-xs" />
+                </td>
+                <td>
+                  <input form={`member-edit-${member.id}`} type="date" name="birth_date" value={member.birth_date ?? ''} class="text-xs" />
+                </td>
+                <td>
+                  <input form={`member-edit-${member.id}`} type="text" name="notes" value={member.notes ?? ''} class="text-xs" />
+                </td>
+                <td>
+                  <label class="inline-flex items-center gap-2 text-xs">
+                    <input form={`member-edit-${member.id}`} type="checkbox" name="is_active" value="1" checked={member.is_active === 1} />
+                    {member.is_active === 1 ? 'Yes' : 'No'}
+                  </label>
+                </td>
+                <td>
+                  <button form={`member-edit-${member.id}`} type="submit" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Save</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {allMembers.map((member) => (
         <form id={`member-edit-${member.id}`} method="post" action="/api/health/member" class="hidden">
           <input type="hidden" name="year" value={selectedYear} />
@@ -139,7 +141,7 @@ const memberSnapshots = members.map((member) => {
       ))}
     </article>
 
-    <article class="panel" id="symptom-log">
+    <article class="panel min-w-0" id="symptom-log">
       <h2 class="panel-title">Log Symptom Episode (Child/Spouse/Self)</h2>
       <p class="mt-2 text-xs text-muted">{symptomCount === 0 ? 'No symptom entries yet.' : `${symptomCount} recent symptom entries shown.`}</p>
       <details class="form-card mt-3" open={symptomCount === 0}>

@@ -1,0 +1,320 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { getEnergyOverview } from '@/lib/services/energy';
+import { normalizeReportYear } from '@/lib/utils/year';
+import { formatCurrency } from '@/lib/utils/format';
+
+const tenantId = Astro.locals.tenantId;
+const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
+const saved = Astro.url.searchParams.get('saved');
+const overview = await getEnergyOverview(tenantId, selectedYear);
+
+const usageIntensity = overview.profile?.home_sqft && overview.profile.home_sqft > 0 ? overview.stats.totalElectricKwh / overview.profile.home_sqft : null;
+const costPerKwh = overview.stats.totalElectricKwh > 0 ? overview.stats.totalElectricCost / overview.stats.totalElectricKwh : overview.stats.utilityRatePerKwh;
+const monthlyPeak = overview.monthly.reduce<{ month: string; kwh: number } | null>((max, row) => {
+  if (!max || row.electric_kwh > max.kwh) return { month: row.month, kwh: row.electric_kwh };
+  return max;
+}, null);
+const openActions = overview.actions.filter((a) => a.status === 'planned' || a.status === 'in_progress');
+
+function usageLabelForSource(source: string): string {
+  if (source === 'gas') return 'therms';
+  if (source === 'water') return 'gallons/ccf';
+  if (source === 'solar') return 'kWh generated';
+  if (source === 'electricity') return 'kWh';
+  return 'usage units';
+}
+---
+
+<BaseLayout title="Energy" subtitle="Track household energy consumption and cut waste with practical renewable scenarios.">
+  {saved && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Saved: {saved}</div>}
+  <p class="mb-4 text-xs uppercase tracking-report text-muted">Electric and gas are tracked separately. kWh KPIs are electricity-only.</p>
+
+  <section class="kpi-grid md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-10">
+    <article class="kpi-card"><p class="panel-title">Months Tracked ({selectedYear})</p><p class="kpi-value">{overview.stats.monthsTracked}</p></article>
+    <article class="kpi-card"><p class="panel-title">Electric Usage (kWh)</p><p class="kpi-value">{overview.stats.totalElectricKwh.toFixed(0)}</p></article>
+    <article class="kpi-card"><p class="panel-title">Gas Usage (CCF/Therms)</p><p class="kpi-value">{overview.stats.totalGasUsage.toFixed(1)}</p></article>
+    <article class="kpi-card"><p class="panel-title">Avg Monthly Electric kWh</p><p class="kpi-value">{overview.stats.avgMonthlyKwh.toFixed(0)}</p></article>
+    <article class="kpi-card"><p class="panel-title">Total Utility Cost</p><p class="kpi-value">{formatCurrency(overview.stats.totalCost)}</p></article>
+    <article class="kpi-card"><p class="panel-title">Electric Cost</p><p class="kpi-value">{formatCurrency(overview.stats.totalElectricCost)}</p></article>
+    <article class="kpi-card"><p class="panel-title">Gas Cost</p><p class="kpi-value">{formatCurrency(overview.stats.totalGasCost)}</p></article>
+    <article class="kpi-card"><p class="panel-title">Cost per kWh</p><p class="kpi-value">{formatCurrency(costPerKwh)}</p></article>
+    <article class="kpi-card"><p class="panel-title">Renewable Mix</p><p class="kpi-value">{overview.stats.weightedRenewablePct.toFixed(1)}%</p></article>
+    <article class="kpi-card"><p class="panel-title">Peak Usage Share</p><p class="kpi-value">{(overview.stats.peakShare * 100).toFixed(1)}%</p></article>
+    <article class="kpi-card"><p class="panel-title">Solar Export (kWh)</p><p class="kpi-value">{overview.stats.totalSolarExportKwh.toFixed(0)}</p></article>
+  </section>
+
+  <section class="mt-4 grid gap-4 lg:grid-cols-3">
+    <article class="panel lg:col-span-2">
+      <h2 class="panel-title">Consumption Timeline</h2>
+      <p class="mt-2 text-xs text-muted">Data source: manual utility bills. Peak electric month: {monthlyPeak ? `${monthlyPeak.month} (${monthlyPeak.kwh.toFixed(0)} kWh)` : 'n/a'}.</p>
+      <table class="table-report mt-4 w-full">
+        <thead><tr><th>Month</th><th class="text-right">Electric kWh</th><th class="text-right">Gas (CCF/Therms)</th><th class="text-right">Total Cost</th><th class="text-right">Electric Cost</th><th class="text-right">Gas Cost</th></tr></thead>
+        <tbody>
+          {overview.monthly.length === 0 && <tr><td colspan="6" class="text-xs text-muted">No utility bills tracked yet. Add your first bill below.</td></tr>}
+          {overview.monthly.map((row) => (
+            <tr>
+              <td>{row.month}</td>
+              <td class="mono-num">{row.electric_kwh.toFixed(0)}</td>
+              <td class="mono-num">{row.gas_usage.toFixed(1)}</td>
+              <td class="mono-num">{formatCurrency(row.total_cost)}</td>
+              <td class="mono-num">{formatCurrency(row.electric_cost)}</td>
+              <td class="mono-num">{formatCurrency(row.gas_cost)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </article>
+
+    <article class="panel">
+      <h2 class="panel-title">Energy Profile</h2>
+      <p class="mt-2 text-xs text-muted">Use this to personalize recommendations for solar and efficiency upgrades.</p>
+      <details class="form-card mt-3" open={!overview.profile}>
+        <summary>{overview.profile ? 'Update Home Energy Profile' : 'Add Home Energy Profile'}</summary>
+        <form method="post" action="/api/energy/profile" class="mt-3 grid gap-2">
+          <input type="hidden" name="year" value={selectedYear} />
+          <input type="number" step="1" min="0" name="home_sqft" placeholder="Home square feet" value={overview.profile?.home_sqft ?? ''} />
+          <input type="number" step="1" min="0" name="occupants" placeholder="Occupants" value={overview.profile?.occupants ?? ''} />
+          <input type="number" step="0.001" min="0" name="utility_rate_per_kwh" placeholder="Utility rate ($/kWh)" value={overview.profile?.utility_rate_per_kwh ?? ''} />
+          <input type="number" step="1" min="0" name="target_monthly_kwh" placeholder="Target monthly kWh" value={overview.profile?.target_monthly_kwh ?? ''} />
+          <input type="number" step="1" min="1" max="10" name="roof_solar_score" placeholder="Roof solar score (1-10)" value={overview.profile?.roof_solar_score ?? ''} />
+          <label class="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="owns_home" value="1" checked={overview.profile?.owns_home !== 0} /> Owns home</label>
+          <label class="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="has_solar" value="1" checked={overview.profile?.has_solar === 1} /> Has rooftop solar</label>
+          <label class="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="green_utility_plan" value="1" checked={overview.profile?.green_utility_plan === 1} /> On green utility/community solar plan</label>
+          <textarea name="notes" rows="2" placeholder="House notes (HVAC age, insulation, EV, etc)">{overview.profile?.notes ?? ''}</textarea>
+          <button type="submit" class="border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Profile</button>
+        </form>
+      </details>
+      <div class="mt-3 border border-grid p-3 text-xs text-muted">
+        <p>Target Monthly Usage: <span class="mono-num text-ink">{overview.stats.targetMonthlyKwh.toFixed(0)} kWh</span></p>
+        <p class="mt-1">Usage Intensity: <span class="mono-num text-ink">{usageIntensity !== null ? `${usageIntensity.toFixed(2)} kWh / sq ft` : 'Add home sqft to calculate'}</span></p>
+      </div>
+    </article>
+  </section>
+
+  <section class="mt-4 grid gap-4 lg:grid-cols-2">
+    <article class="panel">
+      <h2 class="panel-title">Reduction Plan</h2>
+      <p class="mt-2 text-xs text-muted">Prioritized actions based on your usage profile. Add the ones you plan to execute.</p>
+      <div class="mt-3 grid gap-3">
+        {overview.recommendations.length === 0 && <div class="border border-grid p-3 text-xs text-muted">Add at least one utility bill to generate recommendations.</div>}
+        {overview.recommendations.map((rec) => (
+          <div class="border border-grid p-3">
+            <div class="flex items-start justify-between gap-2">
+              <div>
+                <p class="text-xs uppercase tracking-report text-muted">{rec.category} • {rec.priority}</p>
+                <h3 class="mt-1 text-sm font-semibold">{rec.title}</h3>
+                <p class="mt-1 text-xs text-muted">{rec.rationale}</p>
+                <form method="post" action="/api/energy/action" class="mt-2">
+                  <input type="hidden" name="mode" value="recommendation" />
+                  <input type="hidden" name="year" value={selectedYear} />
+                  <input type="hidden" name="action_name" value={rec.title} />
+                  <input type="hidden" name="category" value={rec.category} />
+                  <input type="hidden" name="priority" value={rec.priority} />
+                  <input type="hidden" name="estimated_annual_kwh_savings" value={rec.estimatedAnnualKwhSavings} />
+                  <input type="hidden" name="estimated_annual_cost_savings" value={rec.estimatedAnnualCostSavings} />
+                  <input type="hidden" name="estimated_upfront_cost" value={rec.estimatedUpfrontCost} />
+                  <input type="hidden" name="notes" value={rec.rationale} />
+                  <button type="submit" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Add to Action Tracker</button>
+                </form>
+              </div>
+              <div class="text-right text-xs">
+                <p class="mono-num">{rec.estimatedAnnualKwhSavings.toFixed(0)} kWh/yr</p>
+                <p class="mono-num">{formatCurrency(rec.estimatedAnnualCostSavings)}/yr</p>
+                <p class="mono-num">{formatCurrency(rec.estimatedUpfrontCost)} upfront</p>
+                <p class="mono-num">{rec.paybackYears === null ? 'Payback n/a' : `${rec.paybackYears.toFixed(1)} yrs payback`}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </article>
+
+    <article class="panel">
+      <h2 class="panel-title">Action Tracker</h2>
+      <p class="mt-2 text-xs text-muted">Completed actions are rolled into projected annual savings.</p>
+      <details class="form-card mt-3" open={overview.actions.length === 0}>
+        <summary>Add Energy Action</summary>
+        <form method="post" action="/api/energy/action" class="mt-3 grid gap-2 md:grid-cols-2">
+          <input type="hidden" name="year" value={selectedYear} />
+          <input type="text" name="action_name" required placeholder="Action name" class="md:col-span-2" />
+          <select name="category" required>
+            <option value="efficiency">Efficiency</option>
+            <option value="solar">Solar</option>
+            <option value="renewable">Renewable</option>
+            <option value="behavior">Behavior</option>
+            <option value="upgrade">Upgrade</option>
+          </select>
+          <select name="priority"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select>
+          <input type="number" step="1" min="0" name="estimated_annual_kwh_savings" placeholder="Annual kWh savings" />
+          <input type="number" step="0.01" min="0" name="estimated_annual_cost_savings" placeholder="Annual cost savings" />
+          <input type="number" step="0.01" min="0" name="estimated_upfront_cost" placeholder="Upfront cost" class="md:col-span-2" />
+          <textarea name="notes" rows="2" class="md:col-span-2" placeholder="Notes"></textarea>
+          <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Action</button>
+        </form>
+      </details>
+
+      <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <div class="border border-grid p-2"><p class="uppercase tracking-report text-muted">Open Actions</p><p class="mono-num mt-1 text-base">{openActions.length}</p></div>
+        <div class="border border-grid p-2"><p class="uppercase tracking-report text-muted">Completed</p><p class="mono-num mt-1 text-base">{overview.stats.completedActions}</p></div>
+        <div class="border border-grid p-2"><p class="uppercase tracking-report text-muted">Done kWh Savings</p><p class="mono-num mt-1 text-base">{overview.stats.doneActionAnnualKwhSavings.toFixed(0)}</p></div>
+        <div class="border border-grid p-2"><p class="uppercase tracking-report text-muted">Done Cost Savings</p><p class="mono-num mt-1 text-base">{formatCurrency(overview.stats.doneActionAnnualCostSavings)}</p></div>
+      </div>
+
+      <table class="table-report mt-4 w-full">
+        <thead><tr><th>Action</th><th>Status</th><th class="text-right">Annual $</th><th>Update</th></tr></thead>
+        <tbody>
+          {overview.actions.length === 0 && <tr><td colspan="4" class="text-xs text-muted">No actions yet.</td></tr>}
+          {overview.actions.map((action) => (
+            <tr>
+              <td>
+                <p class="text-sm">{action.action_name}</p>
+                <p class="text-[10px] uppercase tracking-report text-muted">{action.category} • {action.priority}</p>
+              </td>
+              <td>{action.status}</td>
+              <td class="mono-num">{formatCurrency(action.estimated_annual_cost_savings)}</td>
+              <td>
+                <form method="post" action="/api/energy/action" class="flex items-center gap-2">
+                  <input type="hidden" name="mode" value="status" />
+                  <input type="hidden" name="year" value={selectedYear} />
+                  <input type="hidden" name="action_id" value={action.id} />
+                  <select name="status" class="text-xs">
+                    <option value="planned" selected={action.status === 'planned'}>Planned</option>
+                    <option value="in_progress" selected={action.status === 'in_progress'}>In Progress</option>
+                    <option value="done" selected={action.status === 'done'}>Done</option>
+                    <option value="skipped" selected={action.status === 'skipped'}>Skipped</option>
+                  </select>
+                  <button type="submit" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Save</button>
+                </form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </article>
+  </section>
+
+  <section class="panel mt-4">
+    <h2 class="panel-title">Add Utility Bill</h2>
+    <p class="mt-2 text-xs text-muted">Enter monthly values from utility statements. Use renewable % if your provider reports clean-energy mix.</p>
+    <details class="form-card mt-3" open={overview.bills.length === 0}>
+      <summary>Add Bill</summary>
+      <form method="post" action="/api/energy/bill" class="mt-3 grid gap-2 md:grid-cols-3" id="energy-bill-form">
+        <input type="hidden" name="year" value={selectedYear} />
+        <input type="month" name="bill_month" required />
+        <input type="text" name="provider_name" required placeholder="Provider" />
+        <select name="source_type" required id="energy-source-type">
+          <option value="electricity">Electricity</option>
+          <option value="gas">Gas</option>
+          <option value="water">Water</option>
+          <option value="solar">Solar</option>
+          <option value="other">Other</option>
+        </select>
+        <div>
+          <label for="energy-usage" class="mb-1 block text-[10px] uppercase tracking-report text-muted" id="energy-usage-label">kWh used</label>
+          <input id="energy-usage" type="number" step="0.01" min="0" name="kwh_used" placeholder="kWh used" />
+        </div>
+        <input type="number" step="0.01" min="0" name="cost_amount" placeholder="Cost ($)" />
+        <div id="energy-peak-wrap">
+          <label for="energy-peak" class="mb-1 block text-[10px] uppercase tracking-report text-muted">Peak kWh</label>
+          <input id="energy-peak" type="number" step="0.01" min="0" name="peak_kwh" placeholder="Peak kWh" />
+        </div>
+        <div id="energy-offpeak-wrap">
+          <label for="energy-offpeak" class="mb-1 block text-[10px] uppercase tracking-report text-muted">Off-peak kWh</label>
+          <input id="energy-offpeak" type="number" step="0.01" min="0" name="off_peak_kwh" placeholder="Off-peak kWh" />
+        </div>
+        <div id="energy-renewable-wrap">
+          <label for="energy-renewable" class="mb-1 block text-[10px] uppercase tracking-report text-muted">Renewable %</label>
+          <input id="energy-renewable" type="number" step="0.1" min="0" max="100" name="renewable_pct" placeholder="Renewable %" />
+        </div>
+        <div id="energy-solar-export-wrap">
+          <label for="energy-solar-export" class="mb-1 block text-[10px] uppercase tracking-report text-muted">Solar export kWh</label>
+          <input id="energy-solar-export" type="number" step="0.01" min="0" name="solar_export_kwh" placeholder="Solar export kWh" />
+        </div>
+        <textarea name="notes" rows="2" class="md:col-span-3" placeholder="Notes"></textarea>
+        <button type="submit" class="md:col-span-3 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Bill</button>
+      </form>
+    </details>
+
+    <table class="table-report mt-4 w-full">
+      <thead><tr><th>Month</th><th>Provider</th><th>Source</th><th class="text-right">kWh</th><th class="text-right">Cost</th><th class="text-right">Renewable %</th></tr></thead>
+      <tbody>
+        {overview.bills.length === 0 && <tr><td colspan="6" class="text-xs text-muted">No utility bills logged yet.</td></tr>}
+        {overview.bills.slice(0, 24).map((bill) => (
+          <tr>
+            <td>{bill.bill_month.slice(0, 7)}</td>
+            <td>{bill.provider_name}</td>
+            <td>{bill.source_type}</td>
+            <td class="mono-num">{bill.kwh_used.toFixed(0)} <span class="text-[10px] text-muted">{usageLabelForSource(bill.source_type)}</span></td>
+            <td class="mono-num">{formatCurrency(bill.cost_amount)}</td>
+            <td class="mono-num">{bill.renewable_pct.toFixed(1)}%</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </section>
+  <script is:inline>
+    function initEnergyBillForm() {
+      const sourceSelect = document.getElementById('energy-source-type');
+      const usageLabel = document.getElementById('energy-usage-label');
+      const usageInput = document.getElementById('energy-usage');
+      const peakWrap = document.getElementById('energy-peak-wrap');
+      const offPeakWrap = document.getElementById('energy-offpeak-wrap');
+      const renewableWrap = document.getElementById('energy-renewable-wrap');
+      const solarExportWrap = document.getElementById('energy-solar-export-wrap');
+      const peakInput = document.getElementById('energy-peak');
+      const offPeakInput = document.getElementById('energy-offpeak');
+      const renewableInput = document.getElementById('energy-renewable');
+      const solarExportInput = document.getElementById('energy-solar-export');
+
+      if (!sourceSelect || !usageLabel || !usageInput) return;
+
+      function setFieldState(wrap, input, visible) {
+        if (!wrap || !input) return;
+        wrap.style.display = visible ? '' : 'none';
+        input.disabled = !visible;
+        if (!visible) input.value = '';
+      }
+
+      function updateEnergyFormBySource() {
+        const source = sourceSelect.value;
+
+        let label = 'Usage amount';
+        let placeholder = 'Usage amount';
+        if (source === 'electricity') {
+          label = 'kWh used';
+          placeholder = 'kWh used';
+        } else if (source === 'gas') {
+          label = 'CCF / Therms used';
+          placeholder = 'CCF or therms used';
+        } else if (source === 'water') {
+          label = 'Gallons / CCF used';
+          placeholder = 'Gallons or CCF used';
+        } else if (source === 'solar') {
+          label = 'kWh generated';
+          placeholder = 'kWh generated';
+        }
+
+        usageLabel.textContent = label;
+        usageInput.placeholder = placeholder;
+
+        const isElectric = source === 'electricity';
+        const isSolar = source === 'solar';
+        setFieldState(peakWrap, peakInput, isElectric);
+        setFieldState(offPeakWrap, offPeakInput, isElectric);
+        setFieldState(renewableWrap, renewableInput, isElectric || source === 'water');
+        setFieldState(solarExportWrap, solarExportInput, isSolar || isElectric);
+      }
+
+      sourceSelect.addEventListener('change', updateEnergyFormBySource);
+      updateEnergyFormBySource();
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initEnergyBillForm, { once: true });
+    } else {
+      initEnergyBillForm();
+    }
+    document.addEventListener('astro:page-load', initEnergyBillForm);
+  </script>
+</BaseLayout>

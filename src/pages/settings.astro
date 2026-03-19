@@ -1,11 +1,17 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro';
+import { listFinanceEntities } from '@/lib/services/finance-entities';
+import { normalizeReportYear } from '@/lib/utils/year';
 
 const tenantId = Astro.locals.tenantId;
 const userId = Astro.locals.userId;
+const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
+const entities = await listFinanceEntities(tenantId, { includeInactive: true });
+const saved = Astro.url.searchParams.get('saved');
 ---
 
 <BaseLayout title="Settings" subtitle="Workspace, profile, notifications, and permissions.">
+  {saved && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Saved: {saved}</div>}
   <section class="panel">
     <h2 class="panel-title">Session Context</h2>
     <dl class="mt-3 space-y-1 text-sm">
@@ -17,6 +23,59 @@ const userId = Astro.locals.userId;
       <a class="border border-grid px-3 py-1 text-xs uppercase tracking-report hover:bg-ink hover:text-paper" href="/settings/tenant-health">
         Open Tenant Health
       </a>
+      <a class="ml-2 border border-grid px-3 py-1 text-xs uppercase tracking-report hover:bg-ink hover:text-paper" href="/pricing">
+        Open Pricing & Billing
+      </a>
+    </div>
+  </section>
+
+  <section class="panel mt-4">
+    <h2 class="panel-title">Finance Entities</h2>
+    <p class="mt-2 text-xs text-muted">Each user should have a person entity. Add business entities for LLC/S-Corp/sole proprietorship with ownership details.</p>
+    <details class="form-card mt-3" open={entities.length === 0}>
+      <summary>Add Finance Entity</summary>
+      <form method="post" action="/api/finance-entities" class="mt-3 grid gap-2 md:grid-cols-2">
+        <input type="hidden" name="year" value={selectedYear} />
+        <input type="text" name="name" required placeholder="Entity name (e.g., Chris Harris Studio LLC)" />
+        <select name="kind" required>
+          <option value="person">Person</option>
+          <option value="business">Business</option>
+        </select>
+        <select name="ownership_type">
+          <option value="">Ownership type (optional)</option>
+          <option value="sole_proprietorship">Sole Proprietorship</option>
+          <option value="single_member_llc">Single-Member LLC</option>
+          <option value="multi_member_llc">Multi-Member LLC</option>
+          <option value="s_corp">S-Corp</option>
+          <option value="c_corp">C-Corp</option>
+          <option value="partnership">Partnership / JV</option>
+          <option value="other">Other</option>
+        </select>
+        <input type="number" step="0.1" min="0" max="100" name="ownership_percent" placeholder="Ownership %" />
+        <input type="text" name="tax_classification" placeholder="Tax classification (optional)" class="md:col-span-2" />
+        <textarea name="notes" rows="2" class="md:col-span-2" placeholder="Notes"></textarea>
+        <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Add Entity</button>
+      </form>
+    </details>
+
+    <div class="overflow-x-auto">
+      <table class="table-report mt-4 w-full min-w-[920px]">
+        <thead><tr><th>Name</th><th>Code</th><th>Kind</th><th>Ownership Type</th><th class="text-right">Ownership %</th><th>Default</th><th>Status</th></tr></thead>
+        <tbody>
+          {entities.length === 0 && <tr><td colspan="7" class="text-xs text-muted">No finance entities yet.</td></tr>}
+          {entities.map((entity) => (
+            <tr>
+              <td>{entity.name}</td>
+              <td class="font-mono text-xs">{entity.code}</td>
+              <td>{entity.kind}</td>
+              <td>{entity.ownership_type ?? '—'}</td>
+              <td class="mono-num">{entity.ownership_percent.toFixed(1)}</td>
+              <td>{entity.is_default === 1 ? 'Yes' : 'No'}</td>
+              <td>{entity.is_active === 1 ? 'Active' : 'Inactive'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   </section>
 </BaseLayout>

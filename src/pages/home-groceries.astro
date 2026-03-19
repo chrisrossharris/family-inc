@@ -1,71 +1,320 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { normalizeReportYear } from '@/lib/utils/year';
+import { formatCurrency } from '@/lib/utils/format';
 import { getHomeGroceriesOverview } from '@/lib/services/pillars';
 
 const tenantId = Astro.locals.tenantId;
 const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
 const saved = Astro.url.searchParams.get('saved');
 const overview = await getHomeGroceriesOverview(tenantId, selectedYear);
+
 const neededItems = overview.items.filter((item) => item.needed);
 const stockedItems = overview.items.filter((item) => !item.needed);
+const categoryLeaders = overview.categorySummary.slice(0, 8);
+const recentReceipts = overview.receipts.slice(0, 12);
+const recentReceiptItems = overview.receiptItems.slice(0, 30);
+const averageReceipt = overview.stats.receiptCount > 0 ? overview.stats.receiptSpendYtd / overview.stats.receiptCount : 0;
 ---
 
-<BaseLayout title="Home & Groceries" subtitle="Practical household inventory and shopping queue.">
+<BaseLayout title="Home & Groceries" subtitle="Family pantry control center with shopping workflow and receipt intelligence.">
   {saved && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Saved: {saved}</div>}
 
-  <section class="grid gap-4 md:grid-cols-4">
-    <article class="panel"><p class="panel-title">Items</p><p class="mono-num mt-2 text-2xl">{overview.stats.totalItems}</p></article>
-    <article class="panel"><p class="panel-title">Need Now</p><p class="mono-num mt-2 text-2xl">{overview.stats.neededNow}</p></article>
-    <article class="panel"><p class="panel-title">Stocked</p><p class="mono-num mt-2 text-2xl">{overview.stats.stocked}</p></article>
-    <article class="panel"><p class="panel-title">Purchased {selectedYear}</p><p class="mono-num mt-2 text-2xl">{overview.stats.purchasedThisYear}</p></article>
+  <section class="panel mb-4">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <p class="panel-title">Weekly Household Ops</p>
+        <p class="mt-1 text-sm text-muted">Run this page like a parent operations board: what to buy, what was bought, and where money is going.</p>
+      </div>
+      <div class="flex flex-wrap gap-2 text-[10px] uppercase tracking-report">
+        <a class="border border-grid px-2 py-1 hover:bg-ink hover:text-paper" href="#shopping-list">Shopping List</a>
+        <a class="border border-grid px-2 py-1 hover:bg-ink hover:text-paper" href="#receipt-scan">Scan Receipt</a>
+        <a class="border border-grid px-2 py-1 hover:bg-ink hover:text-paper" href="#integrations">Integrations</a>
+      </div>
+    </div>
   </section>
 
-  <section class="panel mt-4">
-    <h2 class="panel-title">Grocery Queue</h2>
-    <p class="mt-2 text-xs text-muted">
-      {overview.items.length === 0
-        ? 'No household inventory yet. Add recurring essentials first.'
-        : `${neededItems.length} needed now, ${stockedItems.length} stocked.`}
-    </p>
-    <details class="form-card mt-3" open={overview.items.length === 0}>
-      <summary>Add Grocery Item</summary>
-      <form method="post" action="/api/pillars/grocery" class="mt-3 grid gap-2 md:grid-cols-2">
-        <input type="hidden" name="year" value={selectedYear} />
-        <input type="text" name="item_name" required placeholder="Item name" />
-        <input type="text" name="category" required placeholder="Category" />
-        <input type="number" name="quantity" step="0.25" min="0" placeholder="Quantity" />
-        <input type="text" name="unit" placeholder="Unit (lb, pack, each)" />
-        <input type="date" name="last_purchased_on" />
-        <label class="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="needed" value="1" checked /> Needed now</label>
-        <textarea name="notes" rows="2" class="md:col-span-2" placeholder="Notes"></textarea>
-        <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Item</button>
-      </form>
-    </details>
+  <section class="kpi-grid md:grid-cols-4 2xl:grid-cols-8">
+    <article class="kpi-card"><p class="panel-title">Tracked Items</p><p class="kpi-value">{overview.stats.totalItems}</p></article>
+    <article class="kpi-card"><p class="panel-title">Need This Week</p><p class="kpi-value">{overview.stats.neededNow}</p></article>
+    <article class="kpi-card"><p class="panel-title">Stocked</p><p class="kpi-value">{overview.stats.stocked}</p></article>
+    <article class="kpi-card"><p class="panel-title">Categories</p><p class="kpi-value">{overview.categorySummary.length}</p></article>
+    <article class="kpi-card"><p class="panel-title">Receipts ({selectedYear})</p><p class="kpi-value">{overview.stats.receiptCount}</p></article>
+    <article class="kpi-card"><p class="panel-title">Receipt Spend ({selectedYear})</p><p class="kpi-value">{formatCurrency(overview.stats.receiptSpendYtd)}</p></article>
+    <article class="kpi-card"><p class="panel-title">Avg Receipt</p><p class="kpi-value">{formatCurrency(averageReceipt)}</p></article>
+    <article class="kpi-card"><p class="panel-title">Purchased ({selectedYear})</p><p class="kpi-value">{overview.stats.purchasedThisYear}</p></article>
+  </section>
 
-    <table class="table-report mt-4 w-full">
-      <thead><tr><th>Item</th><th>Category</th><th class="text-right">Qty</th><th>Needed</th><th>Last Purchased</th></tr></thead>
-      <tbody>
-        {overview.items.length === 0 && <tr><td colspan="5" class="text-xs text-muted">No items yet. Add staples like milk, snacks, meds, and cleaning supplies.</td></tr>}
-        {neededItems.map((row) => (
-          <tr>
-            <td>{row.item_name}</td>
-            <td>{row.category}</td>
-            <td class="mono-num">{row.quantity}{row.unit ? ` ${row.unit}` : ''}</td>
-            <td class="text-amber-900">Need now</td>
-            <td>{row.last_purchased_on ?? '—'}</td>
-          </tr>
+  <section class="mt-4 grid gap-4 lg:grid-cols-3" id="shopping-list">
+    <article class="panel lg:col-span-2">
+      <h2 class="panel-title">Shopping List + Pantry Queue</h2>
+      <p class="mt-2 text-xs text-muted">Hit Bought when an item is picked up. It immediately moves out of the weekly list.</p>
+
+      <details class="form-card mt-3" open={overview.items.length === 0}>
+        <summary>Add Grocery Item</summary>
+        <form method="post" action="/api/pillars/grocery" class="mt-3 grid gap-2 md:grid-cols-2">
+          <input type="hidden" name="year" value={selectedYear} />
+          <input type="text" name="item_name" required placeholder="Item name" />
+          <input type="text" name="category" required placeholder="Category" />
+          <input type="number" name="quantity" step="0.25" min="0" placeholder="Quantity" />
+          <input type="text" name="unit" placeholder="Unit (lb, pack, each)" />
+          <input type="date" name="last_purchased_on" />
+          <label class="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="needed" value="1" checked /> Needed now</label>
+          <textarea name="notes" rows="2" class="md:col-span-2" placeholder="Notes"></textarea>
+          <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Item</button>
+        </form>
+      </details>
+
+      <div class="mt-3 space-y-3 md:hidden">
+        {overview.items.length === 0 && <div class="border border-grid p-3 text-xs text-muted">No items yet. Start with weekly staples and household consumables.</div>}
+        {overview.items.map((row) => (
+          <form method="post" action="/api/pillars/grocery" class="mobile-edit-card">
+            <input type="hidden" name="year" value={selectedYear} />
+            <input type="hidden" name="id" value={row.id} />
+            <input type="hidden" name="notes" value={row.notes ?? ''} />
+            <label class="mobile-edit-label">Item<input type="text" name="item_name" required value={row.item_name} class="mt-1" /></label>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="mobile-edit-label">Category<input type="text" name="category" required value={row.category} class="mt-1" /></label>
+              <label class="mobile-edit-label">Unit<input type="text" name="unit" value={row.unit ?? ''} class="mt-1" /></label>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="mobile-edit-label">Quantity<input type="number" step="0.25" min="0" name="quantity" value={row.quantity} class="mt-1 text-right" /></label>
+              <label class="mobile-edit-label">Last Purchased<input type="date" name="last_purchased_on" value={row.last_purchased_on ?? ''} class="mt-1" /></label>
+            </div>
+            <div class="mobile-edit-actions flex items-center justify-between gap-2">
+              <label class="inline-flex items-center gap-2 text-[9px] uppercase tracking-report text-muted">
+                <input type="checkbox" name="needed" value="1" checked={row.needed === 1} />
+                Needed Now
+              </label>
+              <button type="submit" class="border border-grid px-3 py-1.5 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Save</button>
+            </div>
+          </form>
         ))}
-        {stockedItems.map((row) => (
-          <tr>
-            <td>{row.item_name}</td>
-            <td>{row.category}</td>
-            <td class="mono-num">{row.quantity}{row.unit ? ` ${row.unit}` : ''}</td>
-            <td>Stocked</td>
-            <td>{row.last_purchased_on ?? '—'}</td>
-          </tr>
+      </div>
+
+      <div class="overflow-x-auto">
+      <table class="table-report mt-4 w-full min-w-[980px] hidden md:table">
+        <thead><tr><th>Item</th><th>Category</th><th class="text-right">Qty</th><th>Unit</th><th>Status</th><th>Last Purchased</th><th>Action</th><th>Edit</th></tr></thead>
+        <tbody>
+          {overview.items.length === 0 && <tr><td colspan="8" class="text-xs text-muted">No items yet. Start with weekly staples and household consumables.</td></tr>}
+          {neededItems.map((row) => (
+            <tr>
+              <td><input form={`grocery-edit-${row.id}`} type="text" name="item_name" required value={row.item_name} class="text-xs" /></td>
+              <td><input form={`grocery-edit-${row.id}`} type="text" name="category" required value={row.category} class="text-xs" /></td>
+              <td class="mono-num"><input form={`grocery-edit-${row.id}`} type="number" name="quantity" step="0.25" min="0" value={row.quantity} class="w-20 text-right text-xs" /></td>
+              <td><input form={`grocery-edit-${row.id}`} type="text" name="unit" value={row.unit ?? ''} class="w-20 text-xs" /></td>
+              <td><span class="border border-amber-400 bg-amber-50 px-2 py-1 text-[10px] uppercase tracking-report text-amber-900">Need</span></td>
+              <td><input form={`grocery-edit-${row.id}`} type="date" name="last_purchased_on" value={row.last_purchased_on ?? ''} class="text-xs" /></td>
+              <td>
+                <form method="post" action="/api/pillars/grocery-item">
+                  <input type="hidden" name="year" value={selectedYear} />
+                  <input type="hidden" name="id" value={row.id} />
+                  <input type="hidden" name="needed" value="0" />
+                  <button type="submit" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Bought</button>
+                </form>
+              </td>
+              <td><button form={`grocery-edit-${row.id}`} type="submit" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Save</button></td>
+            </tr>
+          ))}
+          {stockedItems.map((row) => (
+            <tr>
+              <td><input form={`grocery-edit-${row.id}`} type="text" name="item_name" required value={row.item_name} class="text-xs" /></td>
+              <td><input form={`grocery-edit-${row.id}`} type="text" name="category" required value={row.category} class="text-xs" /></td>
+              <td class="mono-num"><input form={`grocery-edit-${row.id}`} type="number" name="quantity" step="0.25" min="0" value={row.quantity} class="w-20 text-right text-xs" /></td>
+              <td><input form={`grocery-edit-${row.id}`} type="text" name="unit" value={row.unit ?? ''} class="w-20 text-xs" /></td>
+              <td><span class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report">Stocked</span></td>
+              <td><input form={`grocery-edit-${row.id}`} type="date" name="last_purchased_on" value={row.last_purchased_on ?? ''} class="text-xs" /></td>
+              <td>
+                <form method="post" action="/api/pillars/grocery-item">
+                  <input type="hidden" name="year" value={selectedYear} />
+                  <input type="hidden" name="id" value={row.id} />
+                  <input type="hidden" name="needed" value="1" />
+                  <button type="submit" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Need Again</button>
+                </form>
+              </td>
+              <td><button form={`grocery-edit-${row.id}`} type="submit" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Save</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      </div>
+      {overview.items.map((row) => (
+        <form id={`grocery-edit-${row.id}`} method="post" action="/api/pillars/grocery" class="hidden">
+          <input type="hidden" name="year" value={selectedYear} />
+          <input type="hidden" name="id" value={row.id} />
+          <input type="hidden" name="needed" value={row.needed ? '1' : '0'} />
+          <input type="hidden" name="notes" value={row.notes ?? ''} />
+        </form>
+      ))}
+    </article>
+
+    <article class="panel">
+      <h2 class="panel-title">Category Pressure</h2>
+      <p class="mt-2 text-xs text-muted">Prioritize categories with many needed items.</p>
+      <div class="mt-3 space-y-2">
+        {categoryLeaders.length === 0 && <div class="border border-grid p-3 text-xs text-muted">No categories yet.</div>}
+        {categoryLeaders.map((row) => {
+          const pressure = row.items_count > 0 ? (row.needed_count / row.items_count) * 100 : 0;
+          return (
+            <div class="border border-grid p-2">
+              <div class="flex items-center justify-between text-xs">
+                <span class="uppercase tracking-report">{row.category}</span>
+                <span class="mono-num">{row.needed_count}/{row.items_count}</span>
+              </div>
+              <div class="mt-1 h-2 border border-grid bg-paper">
+                <div class="h-full bg-ink" style={`width: ${Math.min(100, Math.max(0, pressure))}%`}></div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div class="mt-4 border border-grid p-3 text-xs text-muted">
+        <p class="uppercase tracking-report">Household Execution Tip</p>
+        <p class="mt-1">Keep recurring non-food items (detergent, paper goods, meds) on this board to avoid high-cost emergency runs.</p>
+      </div>
+    </article>
+  </section>
+
+  <section class="mt-4 grid gap-4 lg:grid-cols-2" id="receipt-scan">
+    <article class="panel">
+      <h2 class="panel-title">Receipt Scan Intake</h2>
+      <p class="mt-2 text-xs text-muted">Scan with phone, copy OCR text, paste here. Parsed lines will update pantry items automatically.</p>
+      <details class="form-card mt-3" open={overview.stats.receiptCount === 0}>
+        <summary>Scan / Import Receipt</summary>
+        <form method="post" action="/api/pillars/grocery-receipt" class="mt-3 grid gap-2 md:grid-cols-2">
+          <input type="hidden" name="year" value={selectedYear} />
+          <input type="text" name="store_name" placeholder="Store (Kroger, Costco, etc)" />
+          <input type="date" name="purchased_on" required />
+          <input type="number" step="0.01" min="0" name="total_amount" placeholder="Receipt total (optional)" />
+          <select name="source_type">
+            <option value="ocr_text">OCR Text Scan</option>
+            <option value="manual">Manual Entry</option>
+            <option value="integration">Integration</option>
+          </select>
+          <textarea name="raw_text" rows="10" class="md:col-span-2" required placeholder="Paste receipt text here. Example:\nBANANAS 2.49\nMILK 4.99\nPAPER TOWELS 11.99"></textarea>
+          <textarea name="notes" rows="2" class="md:col-span-2" placeholder="Notes"></textarea>
+          <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Parse Receipt + Update Inventory</button>
+        </form>
+      </details>
+      <div class="mt-4 border border-grid p-3 text-xs text-muted">
+        <p class="uppercase tracking-report">Phone Workflow</p>
+        <p class="mt-1">iPhone: Photos or Notes scan -> Copy Text -> paste above. Android: Google Lens -> Copy text -> paste above.</p>
+      </div>
+    </article>
+
+    <article class="panel">
+      <h2 class="panel-title">Recent Receipts</h2>
+      <p class="mt-2 text-xs text-muted">You can edit receipt metadata or delete mistaken scans.</p>
+      <div class="mt-3 space-y-3 md:hidden">
+        {recentReceipts.length === 0 && <div class="border border-grid p-3 text-xs text-muted">No receipts imported yet.</div>}
+        {recentReceipts.map((receipt) => (
+          <form method="post" action="/api/pillars/grocery-receipt" class="mobile-edit-card">
+            <input type="hidden" name="year" value={selectedYear} />
+            <input type="hidden" name="id" value={receipt.id} />
+            <input type="hidden" name="mode" value="update" />
+            <label class="mobile-edit-label">Date
+              <input type="date" name="purchased_on" required value={receipt.purchased_on} class="mt-1" />
+            </label>
+            <label class="mobile-edit-label">Store
+              <input type="text" name="store_name" value={receipt.store_name ?? ''} class="mt-1" />
+            </label>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="mobile-edit-label">Source
+                <select name="source_type" class="mt-1">
+                  <option value="manual" selected={receipt.source_type === 'manual'}>manual</option>
+                  <option value="ocr_text" selected={receipt.source_type === 'ocr_text'}>ocr_text</option>
+                  <option value="integration" selected={receipt.source_type === 'integration'}>integration</option>
+                </select>
+              </label>
+              <label class="mobile-edit-label">Total
+                <input type="number" step="0.01" min="0" name="total_amount" value={receipt.total_amount.toFixed(2)} class="mt-1 text-right" />
+              </label>
+            </div>
+            <label class="mobile-edit-label">Notes
+              <input type="text" name="notes" value={receipt.notes ?? ''} class="mt-1" placeholder="Optional notes" />
+            </label>
+            <div class="mobile-edit-actions flex items-center justify-between gap-2">
+              <button type="submit" class="border border-grid px-3 py-1.5 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Save</button>
+              <button formaction="/api/pillars/grocery-receipt" name="mode" value="delete" type="submit" class="border border-red-500 px-3 py-1.5 text-[10px] uppercase tracking-report text-red-700 hover:bg-red-600 hover:text-paper">Delete</button>
+            </div>
+          </form>
         ))}
-      </tbody>
-    </table>
+      </div>
+      <div class="overflow-x-auto">
+      <table class="table-report mt-3 hidden min-w-[980px] w-full md:table">
+        <thead><tr><th>Date</th><th>Store</th><th>Source</th><th class="text-right">Total</th><th>Notes</th><th>Edit</th><th>Delete</th></tr></thead>
+        <tbody>
+          {recentReceipts.length === 0 && <tr><td colspan="7" class="text-xs text-muted">No receipts imported yet.</td></tr>}
+          {recentReceipts.map((receipt) => (
+            <tr>
+              <td><input type="date" form={`receipt-edit-${receipt.id}`} name="purchased_on" required value={receipt.purchased_on} class="text-xs" /></td>
+              <td><input type="text" form={`receipt-edit-${receipt.id}`} name="store_name" value={receipt.store_name ?? ''} class="text-xs" /></td>
+              <td>
+                <select form={`receipt-edit-${receipt.id}`} name="source_type" class="text-xs">
+                  <option value="manual" selected={receipt.source_type === 'manual'}>manual</option>
+                  <option value="ocr_text" selected={receipt.source_type === 'ocr_text'}>ocr_text</option>
+                  <option value="integration" selected={receipt.source_type === 'integration'}>integration</option>
+                </select>
+              </td>
+              <td class="mono-num"><input type="number" form={`receipt-edit-${receipt.id}`} step="0.01" min="0" name="total_amount" value={receipt.total_amount.toFixed(2)} class="w-24 text-right text-xs" /></td>
+              <td><input type="text" form={`receipt-edit-${receipt.id}`} name="notes" value={receipt.notes ?? ''} placeholder="Optional" class="text-xs" /></td>
+              <td><button form={`receipt-edit-${receipt.id}`} type="submit" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Save</button></td>
+              <td><button form={`receipt-delete-${receipt.id}`} type="submit" class="border border-red-500 px-2 py-1 text-[10px] uppercase tracking-report text-red-700 hover:bg-red-600 hover:text-paper">Delete</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      </div>
+      {recentReceipts.map((receipt) => (
+        <>
+          <form id={`receipt-edit-${receipt.id}`} method="post" action="/api/pillars/grocery-receipt" class="hidden">
+            <input type="hidden" name="year" value={selectedYear} />
+            <input type="hidden" name="mode" value="update" />
+            <input type="hidden" name="id" value={receipt.id} />
+          </form>
+          <form id={`receipt-delete-${receipt.id}`} method="post" action="/api/pillars/grocery-receipt" class="hidden">
+            <input type="hidden" name="year" value={selectedYear} />
+            <input type="hidden" name="mode" value="delete" />
+            <input type="hidden" name="id" value={receipt.id} />
+          </form>
+        </>
+      ))}
+
+      <h3 class="panel-title mt-4">Latest Parsed Line Items</h3>
+      <table class="table-report mt-2 w-full">
+        <thead><tr><th>Date</th><th>Item</th><th>Category</th><th class="text-right">Qty</th><th class="text-right">Line Total</th></tr></thead>
+        <tbody>
+          {recentReceiptItems.length === 0 && <tr><td colspan="5" class="text-xs text-muted">No parsed line items yet.</td></tr>}
+          {recentReceiptItems.map((item) => (
+            <tr>
+              <td>{item.purchased_on}</td>
+              <td>{item.item_name}</td>
+              <td>{item.category}</td>
+              <td class="mono-num">{item.quantity.toFixed(2)}</td>
+              <td class="mono-num">{formatCurrency(item.line_total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </article>
+  </section>
+
+  <section class="panel mt-4" id="integrations">
+    <h2 class="panel-title">Retail Integrations</h2>
+    <div class="mt-3 grid gap-3 md:grid-cols-2">
+      <div class="border border-grid p-3">
+        <p class="text-xs uppercase tracking-report">Kroger Alt ID</p>
+        <p class="mt-1 text-sm">Direct pull from Alt ID alone is not supported.</p>
+        <p class="mt-2 text-xs text-muted">Alt ID identifies loyalty at checkout, but receipt/history access needs authenticated account APIs and explicit consent scopes. We can add this once Kroger API credentials and approval are available.</p>
+      </div>
+      <div class="border border-grid p-3">
+        <p class="text-xs uppercase tracking-report">What Works Now</p>
+        <ul class="mt-1 list-disc pl-5 text-xs text-muted">
+          <li>OCR text receipt paste (implemented)</li>
+          <li>Manual line-item receipt entry (implemented)</li>
+          <li>Email-forward parser (next)</li>
+        </ul>
+      </div>
+    </div>
   </section>
 </BaseLayout>

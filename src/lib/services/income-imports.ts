@@ -25,6 +25,22 @@ export interface IncomeImportResult {
   invalid: number;
 }
 
+export interface IncomeImportPreview {
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  incomeLikeRows: number;
+  sample: Array<{
+    receivedDate: string;
+    sourceType: IncomeSourceType;
+    payerName: string;
+    projectName: string | null;
+    grossAmount: number;
+    splitTotal: number;
+    incomeLike: boolean;
+  }>;
+}
+
 function pick(row: Record<string, string | null | undefined>, candidates: string[]): string {
   for (const key of candidates) {
     const found = Object.keys(row).find((k) => k.toLowerCase().trim() === key.toLowerCase());
@@ -56,6 +72,7 @@ function normalizeSourceType(input: string): IncomeSourceType {
   if (value.includes('gift')) return 'gift';
   if (value.includes('unemployment')) return 'unemployment';
   if (value.includes('food')) return 'food_stamps';
+  if (value.includes('interest')) return 'interest';
   return 'other';
 }
 
@@ -66,6 +83,7 @@ function inferSourceType(sourceTypeRaw: string, payerRaw: string): IncomeSourceT
   if (payer.includes('unemployment')) return 'unemployment';
   if (payer.includes('food') || payer.includes('snap') || payer.includes('ebt')) return 'food_stamps';
   if (payer.includes('gift')) return 'gift';
+  if (payer.includes('interest') || payer.includes('dividend')) return 'interest';
   return 'client_payment';
 }
 
@@ -181,9 +199,34 @@ export async function importIncomeCsvFile(tenantId: string, content: string): Pr
         { entity: 'big_picture', percent: row.splitBigPicture }
       ]
     });
-    if (insertedRow) inserted += 1;
+    if (insertedRow.inserted) inserted += 1;
     else skipped += 1;
   }
 
   return { inserted, skipped, invalid };
+}
+
+export function previewIncomeCsv(content: string): IncomeImportPreview {
+  const parsed = parseIncomeCsv(content);
+  const rows = parsed.rows;
+  const invalidRows = rows.filter((row) => {
+    const splitTotal = row.splitChris + row.splitKate + row.splitBigPicture;
+    return !(row.incomeLike && row.grossAmount > 0 && row.payerName.trim().length > 0 && splitTotal > 0 && splitTotal <= 100);
+  }).length;
+
+  return {
+    totalRows: rows.length + parsed.invalid,
+    validRows: rows.length - invalidRows,
+    invalidRows: parsed.invalid + invalidRows,
+    incomeLikeRows: rows.filter((row) => row.incomeLike).length,
+    sample: rows.slice(0, 8).map((row) => ({
+      receivedDate: row.receivedDate,
+      sourceType: row.sourceType,
+      payerName: row.payerName,
+      projectName: row.projectName,
+      grossAmount: row.grossAmount,
+      splitTotal: row.splitChris + row.splitKate + row.splitBigPicture,
+      incomeLike: row.incomeLike
+    }))
+  };
 }

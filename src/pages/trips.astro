@@ -21,15 +21,15 @@ const unpackedByTrip = overview.items.reduce<Record<string, number>>((acc, item)
 <BaseLayout title="Trips" subtitle="Travel planning, budgets, and packing execution in one place.">
   {saved && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Saved: {saved}</div>}
 
-  <section class="grid gap-4 md:grid-cols-4 lg:grid-cols-8">
-    <article class="panel"><p class="panel-title">Trips</p><p class="mono-num mt-2 text-2xl">{overview.stats.totalTrips}</p></article>
-    <article class="panel"><p class="panel-title">Trips {selectedYear}</p><p class="mono-num mt-2 text-2xl">{overview.stats.tripsThisYear}</p></article>
-    <article class="panel"><p class="panel-title">Planned / Booked</p><p class="mono-num mt-2 text-2xl">{overview.stats.plannedTrips}</p></article>
-    <article class="panel"><p class="panel-title">Upcoming / Active</p><p class="mono-num mt-2 text-2xl">{upcomingTrips.length}</p></article>
-    <article class="panel"><p class="panel-title">Budget Total</p><p class="mono-num mt-2 text-2xl">${budgetTotal.toFixed(0)}</p></article>
-    <article class="panel"><p class="panel-title">Packed Items</p><p class="mono-num mt-2 text-2xl">{overview.stats.packedItems}</p></article>
-    <article class="panel"><p class="panel-title">Unpacked Items</p><p class="mono-num mt-2 text-2xl">{overview.stats.unpackedItems}</p></article>
-    <article class="panel"><p class="panel-title">No Budget Set</p><p class="mono-num mt-2 text-2xl">{tripsMissingBudget.length}</p></article>
+  <section class="kpi-grid md:grid-cols-4 2xl:grid-cols-8">
+    <article class="kpi-card"><p class="panel-title">Trips</p><p class="kpi-value">{overview.stats.totalTrips}</p></article>
+    <article class="kpi-card"><p class="panel-title">Trips {selectedYear}</p><p class="kpi-value">{overview.stats.tripsThisYear}</p></article>
+    <article class="kpi-card"><p class="panel-title">Planned / Booked</p><p class="kpi-value">{overview.stats.plannedTrips}</p></article>
+    <article class="kpi-card"><p class="panel-title">Upcoming / Active</p><p class="kpi-value">{upcomingTrips.length}</p></article>
+    <article class="kpi-card"><p class="panel-title">Budget Total</p><p class="kpi-value">${budgetTotal.toFixed(0)}</p></article>
+    <article class="kpi-card"><p class="panel-title">Packed Items</p><p class="kpi-value">{overview.stats.packedItems}</p></article>
+    <article class="kpi-card"><p class="panel-title">Unpacked Items</p><p class="kpi-value">{overview.stats.unpackedItems}</p></article>
+    <article class="kpi-card"><p class="panel-title">No Budget Set</p><p class="kpi-value">{tripsMissingBudget.length}</p></article>
   </section>
 
   <section class="mt-4 grid gap-4 lg:grid-cols-2">
@@ -50,22 +50,96 @@ const unpackedByTrip = overview.items.reduce<Record<string, number>>((acc, item)
           <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Trip</button>
         </form>
       </details>
-      <table class="table-report mt-4 w-full">
-        <thead><tr><th>Trip</th><th>Destination</th><th>Dates</th><th>Status</th><th class="text-right">Budget</th><th class="text-right">Open Items</th></tr></thead>
+      <div class="mt-3 space-y-3 md:hidden">
+        {overview.trips.length === 0 && <div class="border border-grid p-3 text-xs text-muted">No trips yet. Add first trip above.</div>}
+        {overview.trips.map((row) => (
+          <form method="post" action="/api/pillars/trip" class="mobile-edit-card">
+            <input type="hidden" name="year" value={selectedYear} />
+            <input type="hidden" name="id" value={row.id} />
+            <input type="hidden" name="notes" value={row.notes ?? ''} />
+            <label class="mobile-edit-label">Trip
+              <input type="text" name="trip_name" required value={row.trip_name} class="mt-1" />
+            </label>
+            <label class="mobile-edit-label">Destination
+              <input type="text" name="destination" value={row.destination ?? ''} class="mt-1" />
+            </label>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="mobile-edit-label">Start
+                <input type="date" name="start_date" required value={row.start_date} class="mt-1" />
+              </label>
+              <label class="mobile-edit-label">End
+                <input type="date" name="end_date" required value={row.end_date} class="mt-1" />
+              </label>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="mobile-edit-label">Status
+                <select name="status" class="mt-1">
+                  <option value="planned" selected={row.status === 'planned'}>planned</option>
+                  <option value="booked" selected={row.status === 'booked'}>booked</option>
+                  <option value="in_progress" selected={row.status === 'in_progress'}>in_progress</option>
+                  <option value="completed" selected={row.status === 'completed'}>completed</option>
+                  <option value="cancelled" selected={row.status === 'cancelled'}>cancelled</option>
+                </select>
+              </label>
+              <label class="mobile-edit-label">Budget
+                <input type="number" step="0.01" min="0" name="budget_amount" value={row.budget_amount.toFixed(2)} class="mt-1 text-right" />
+              </label>
+            </div>
+            <div class="mobile-edit-actions flex items-center justify-between">
+              <span class="text-[9px] uppercase tracking-report text-muted">Open items: <span class="mono-num text-ink">{unpackedByTrip[row.trip_name] ?? 0}</span></span>
+              <button type="submit" class="border border-grid px-3 py-1.5 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Save</button>
+            </div>
+          </form>
+        ))}
+      </div>
+      <div class="overflow-x-auto">
+      <table class="table-report mt-4 w-full min-w-[1180px] hidden md:table">
+        <thead><tr><th>Trip</th><th>Destination</th><th>Dates</th><th>Status</th><th class="text-right">Budget</th><th class="text-right">Open Items</th><th>Edit</th></tr></thead>
         <tbody>
-          {overview.trips.length === 0 && <tr><td colspan="6" class="text-xs text-muted">No trips yet. Add first trip above.</td></tr>}
+          {overview.trips.length === 0 && <tr><td colspan="7" class="text-xs text-muted">No trips yet. Add first trip above.</td></tr>}
           {overview.trips.map((row) => (
             <tr>
-              <td>{row.trip_name}</td>
-              <td>{row.destination ?? '—'}</td>
-              <td class="font-mono text-xs">{row.start_date} → {row.end_date}</td>
-              <td>{row.status}</td>
-              <td class:list={['mono-num', row.budget_amount <= 0 ? 'text-amber-900' : undefined]}>{row.budget_amount > 0 ? `$${row.budget_amount.toFixed(0)}` : 'Set budget'}</td>
+              <td>
+                <input form={`trip-edit-${row.id}`} type="text" name="trip_name" required value={row.trip_name} class="text-xs" />
+              </td>
+              <td>
+                <input form={`trip-edit-${row.id}`} type="text" name="destination" value={row.destination ?? ''} class="text-xs" />
+              </td>
+              <td class="font-mono text-xs">
+                <div class="edit-date-range">
+                  <input form={`trip-edit-${row.id}`} type="date" name="start_date" required value={row.start_date} class="text-xs" />
+                  <span>→</span>
+                  <input form={`trip-edit-${row.id}`} type="date" name="end_date" required value={row.end_date} class="text-xs" />
+                </div>
+              </td>
+              <td>
+                <select form={`trip-edit-${row.id}`} name="status" class="text-xs">
+                  <option value="planned" selected={row.status === 'planned'}>planned</option>
+                  <option value="booked" selected={row.status === 'booked'}>booked</option>
+                  <option value="in_progress" selected={row.status === 'in_progress'}>in_progress</option>
+                  <option value="completed" selected={row.status === 'completed'}>completed</option>
+                  <option value="cancelled" selected={row.status === 'cancelled'}>cancelled</option>
+                </select>
+              </td>
+              <td class:list={['mono-num', row.budget_amount <= 0 ? 'text-amber-900' : undefined]}>
+                <input form={`trip-edit-${row.id}`} type="number" step="0.01" min="0" name="budget_amount" value={row.budget_amount.toFixed(2)} class="w-28 text-right text-xs" />
+              </td>
               <td class:list={['mono-num', (unpackedByTrip[row.trip_name] ?? 0) > 0 ? 'text-amber-900' : undefined]}>{unpackedByTrip[row.trip_name] ?? 0}</td>
+              <td>
+                <button form={`trip-edit-${row.id}`} type="submit" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Save</button>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+      </div>
+      {overview.trips.map((row) => (
+        <form id={`trip-edit-${row.id}`} method="post" action="/api/pillars/trip" class="hidden">
+          <input type="hidden" name="year" value={selectedYear} />
+          <input type="hidden" name="id" value={row.id} />
+          <input type="hidden" name="notes" value={row.notes ?? ''} />
+        </form>
+      ))}
     </article>
 
     <article class="panel">

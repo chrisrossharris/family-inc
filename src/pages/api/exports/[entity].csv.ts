@@ -3,14 +3,17 @@ import db from '@/lib/db/connection';
 import { sqlYearExpr } from '@/lib/db/sql-dialect';
 import { normalizeReportYear } from '@/lib/utils/year';
 import { resolveSession } from '@/lib/auth/session';
+import { entityExists } from '@/lib/services/finance-entities';
 
 export const GET: APIRoute = async ({ params, url, locals, cookies }) => {
   const entity = params.entity;
-  if (!entity || !['chris', 'kate', 'big_picture'].includes(entity)) {
+  if (!entity) {
     return new Response('Invalid entity', { status: 400 });
   }
 
   const session = resolveSession(locals, cookies);
+  const validEntity = await entityExists(session.tenantId, entity);
+  if (!validEntity) return new Response('Invalid entity', { status: 400 });
   const year = normalizeReportYear(url.searchParams.get('year'));
   const yearExpr = sqlYearExpr('date');
   const rows = await db.all<{
