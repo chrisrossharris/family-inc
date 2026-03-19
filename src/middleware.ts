@@ -116,9 +116,10 @@ export const onRequest = clerkMiddleware(async (auth, context, next) => {
   const orgId = (auth() as { orgId?: string | null }).orgId;
   const orgName = (auth() as { orgName?: string | null }).orgName;
 
-  const cookieUserId = context.cookies.get(USER_COOKIE)?.value ?? null;
   const cookieTenantId = context.cookies.get(TENANT_COOKIE)?.value ?? null;
-  const preferredTenantId = cookieUserId === userId ? cookieTenantId : null;
+  // Prefer the tenant cookie regardless of user-cookie parity; membership checks
+  // in resolveAppWorkspace prevent selecting unauthorized workspaces.
+  const preferredTenantId = cookieTenantId;
 
   const workspace = await resolveAppWorkspace({
     userId,
