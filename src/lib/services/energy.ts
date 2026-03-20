@@ -177,6 +177,43 @@ export async function deleteEnergyBill(input: {
   );
 }
 
+export async function updateEnergyBill(input: {
+  tenantId: string;
+  id: number;
+  billMonth: string;
+  providerName: string;
+  sourceType: EnergySourceType;
+  kwhUsed?: number;
+  costAmount?: number;
+  peakKwh?: number;
+  offPeakKwh?: number;
+  renewablePct?: number;
+  solarExportKwh?: number;
+  notes?: string | null;
+}) {
+  const billMonth = normalizeBillMonth(input.billMonth);
+  await db.run(
+    `UPDATE energy_bills
+     SET bill_month = ?, provider_name = ?, source_type = ?, kwh_used = ?, cost_amount = ?, peak_kwh = ?,
+         off_peak_kwh = ?, renewable_pct = ?, solar_export_kwh = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE tenant_id = ? AND id = ?`,
+    [
+      billMonth,
+      input.providerName,
+      input.sourceType,
+      input.kwhUsed ?? 0,
+      input.costAmount ?? 0,
+      input.peakKwh ?? 0,
+      input.offPeakKwh ?? 0,
+      input.renewablePct ?? 0,
+      input.solarExportKwh ?? 0,
+      input.notes ?? null,
+      input.tenantId,
+      input.id
+    ]
+  );
+}
+
 export async function addEnergyAction(input: {
   tenantId: string;
   actionName: string;

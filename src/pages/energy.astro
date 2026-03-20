@@ -239,22 +239,47 @@ function usageLabelForSource(source: string): string {
     </details>
 
     <table class="table-report mt-4 w-full">
-      <thead><tr><th>Month</th><th>Provider</th><th>Source</th><th class="text-right">kWh</th><th class="text-right">Cost</th><th class="text-right">Renewable %</th><th>Remove</th></tr></thead>
+      <thead><tr><th>Month</th><th>Provider</th><th>Source</th><th class="text-right">Usage</th><th class="text-right">Cost</th><th class="text-right">Renewable %</th><th>Edit</th><th>Remove</th></tr></thead>
       <tbody>
-        {overview.bills.length === 0 && <tr><td colspan="7" class="text-xs text-muted">No utility bills logged yet.</td></tr>}
+        {overview.bills.length === 0 && <tr><td colspan="8" class="text-xs text-muted">No utility bills logged yet.</td></tr>}
         {overview.bills.slice(0, 24).map((bill) => (
           <tr>
-            <td>{bill.bill_month.slice(0, 7)}</td>
-            <td>{bill.provider_name}</td>
-            <td>{bill.source_type}</td>
-            <td class="mono-num">{bill.kwh_used.toFixed(0)} <span class="text-[10px] text-muted">{usageLabelForSource(bill.source_type)}</span></td>
-            <td class="mono-num">{formatCurrency(bill.cost_amount)}</td>
-            <td class="mono-num">{bill.renewable_pct.toFixed(1)}%</td>
+            <td>
+              <input type="month" name="bill_month" value={bill.bill_month.slice(0, 7)} class="min-w-[8rem]" form={`energy-bill-${bill.id}`} />
+            </td>
+            <td><input type="text" name="provider_name" value={bill.provider_name} class="min-w-[10rem]" form={`energy-bill-${bill.id}`} /></td>
+            <td>
+              <select name="source_type" class="min-w-[8rem]" form={`energy-bill-${bill.id}`}>
+                <option value="electricity" selected={bill.source_type === 'electricity'}>Electricity</option>
+                <option value="gas" selected={bill.source_type === 'gas'}>Gas</option>
+                <option value="water" selected={bill.source_type === 'water'}>Water</option>
+                <option value="solar" selected={bill.source_type === 'solar'}>Solar</option>
+                <option value="other" selected={bill.source_type === 'other'}>Other</option>
+              </select>
+            </td>
+            <td class="mono-num">
+              <input type="number" step="0.01" min="0" name="kwh_used" value={bill.kwh_used} class="min-w-[6rem] text-right" form={`energy-bill-${bill.id}`} />
+              <span class="ml-1 text-[10px] text-muted">{usageLabelForSource(bill.source_type)}</span>
+            </td>
+            <td class="mono-num"><input type="number" step="0.01" min="0" name="cost_amount" value={bill.cost_amount} class="min-w-[6rem] text-right" form={`energy-bill-${bill.id}`} /></td>
+            <td class="mono-num"><input type="number" step="0.1" min="0" max="100" name="renewable_pct" value={bill.renewable_pct} class="min-w-[5rem] text-right" form={`energy-bill-${bill.id}`} /></td>
+            <td>
+              <form id={`energy-bill-${bill.id}`} method="post" action="/api/energy/bill">
+                <input type="hidden" name="mode" value="update" />
+                <input type="hidden" name="id" value={bill.id} />
+                <input type="hidden" name="year" value={selectedYear} />
+                <input type="hidden" name="peak_kwh" value={bill.peak_kwh} />
+                <input type="hidden" name="off_peak_kwh" value={bill.off_peak_kwh} />
+                <input type="hidden" name="solar_export_kwh" value={bill.solar_export_kwh} />
+                <textarea name="notes" class="hidden">{bill.notes ?? ''}</textarea>
+                <button type="submit" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Save</button>
+              </form>
+            </td>
             <td>
               <form method="post" action="/api/energy/bill" onsubmit="return confirm('Delete this utility bill?');">
                 <input type="hidden" name="mode" value="delete" />
                 <input type="hidden" name="id" value={bill.id} />
-                <input type="hidden" name="year" value={selectedYear} />
+                <input type="hidden" name="year" value={bill.bill_month.slice(0, 4)} />
                 <button type="submit" class="border border-red-400 px-2 py-1 text-[10px] uppercase tracking-report text-red-700 hover:bg-red-50">Delete</button>
               </form>
             </td>
