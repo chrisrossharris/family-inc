@@ -3,13 +3,14 @@ import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { normalizeReportYear } from '@/lib/utils/year';
 import { addFamilyMilestone, updateFamilyMilestone } from '@/lib/services/pillars';
+import { formOptionalInt, formTrimmedString } from '@/lib/validation/form';
 
 const schema = z.object({
-  id: z.coerce.number().int().positive().optional(),
+  id: formOptionalInt({ positive: true }),
   member_name: z.string().optional(),
   milestone_date: z.string().min(10),
-  area: z.string().min(1),
-  title: z.string().min(1),
+  area: formTrimmedString(),
+  title: formTrimmedString(),
   notes: z.string().optional(),
   year: z.string().optional()
 });

@@ -3,14 +3,15 @@ import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { addSickDay } from '@/lib/services/health';
 import { normalizeReportYear } from '@/lib/utils/year';
+import { formOptionalNumber, formTrimmedString } from '@/lib/validation/form';
 
 const schema = z.object({
   member_id: z.coerce.number().min(1),
   start_date: z.string().min(10),
   end_date: z.string().min(10),
-  reason: z.string().min(1),
-  fever: z.coerce.number().optional(),
-  school_work_missed: z.coerce.number().optional(),
+  reason: formTrimmedString(),
+  fever: formOptionalNumber(),
+  school_work_missed: formOptionalNumber(),
   notes: z.string().optional(),
   year: z.string().optional()
 });

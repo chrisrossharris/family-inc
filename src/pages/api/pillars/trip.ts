@@ -3,14 +3,15 @@ import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { normalizeReportYear } from '@/lib/utils/year';
 import { addTrip, updateTrip } from '@/lib/services/pillars';
+import { formOptionalInt, formOptionalNumber, formTrimmedString } from '@/lib/validation/form';
 
 const schema = z.object({
-  id: z.coerce.number().int().positive().optional(),
-  trip_name: z.string().min(1),
+  id: formOptionalInt({ positive: true }),
+  trip_name: formTrimmedString(),
   start_date: z.string().min(10),
   end_date: z.string().min(10),
   destination: z.string().optional(),
-  budget_amount: z.coerce.number().optional(),
+  budget_amount: formOptionalNumber(),
   status: z.enum(['planned', 'booked', 'in_progress', 'completed', 'cancelled']).optional(),
   notes: z.string().optional(),
   year: z.string().optional()

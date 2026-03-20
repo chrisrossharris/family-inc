@@ -3,18 +3,19 @@ import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { addEnergyBill } from '@/lib/services/energy';
 import { normalizeReportYear } from '@/lib/utils/year';
+import { formOptionalNumber, formTrimmedString } from '@/lib/validation/form';
 
 const schema = z.object({
   year: z.string().optional(),
-  bill_month: z.string().regex(/^\d{4}-\d{2}(-\d{2})?$/),
-  provider_name: z.string().min(1),
+  bill_month: z.string().trim().regex(/^\d{4}-\d{2}(-\d{2})?$/),
+  provider_name: formTrimmedString(),
   source_type: z.enum(['electricity', 'gas', 'water', 'solar', 'other']),
-  kwh_used: z.coerce.number().min(0).optional(),
-  cost_amount: z.coerce.number().min(0).optional(),
-  peak_kwh: z.coerce.number().min(0).optional(),
-  off_peak_kwh: z.coerce.number().min(0).optional(),
-  renewable_pct: z.coerce.number().min(0).max(100).optional(),
-  solar_export_kwh: z.coerce.number().min(0).optional(),
+  kwh_used: formOptionalNumber({ min: 0 }),
+  cost_amount: formOptionalNumber({ min: 0 }),
+  peak_kwh: formOptionalNumber({ min: 0 }),
+  off_peak_kwh: formOptionalNumber({ min: 0 }),
+  renewable_pct: formOptionalNumber({ min: 0, max: 100 }),
+  solar_export_kwh: formOptionalNumber({ min: 0 }),
   notes: z.string().optional()
 });
 

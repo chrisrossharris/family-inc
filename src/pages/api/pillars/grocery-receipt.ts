@@ -3,13 +3,14 @@ import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { normalizeReportYear } from '@/lib/utils/year';
 import { addGroceryReceiptFromText, deleteGroceryReceipt, updateGroceryReceipt } from '@/lib/services/pillars';
+import { formOptionalNumber, formTrimmedString } from '@/lib/validation/form';
 
 const createSchema = z.object({
   store_name: z.string().optional(),
   purchased_on: z.string().min(10),
-  total_amount: z.preprocess((v) => (v === '' ? undefined : v), z.coerce.number().min(0).optional()),
+  total_amount: formOptionalNumber({ min: 0 }),
   source_type: z.enum(['manual', 'ocr_text', 'integration']).optional(),
-  raw_text: z.string().min(1),
+  raw_text: formTrimmedString(),
   notes: z.string().optional(),
   year: z.string().optional()
 });
@@ -18,7 +19,7 @@ const updateSchema = z.object({
   id: z.coerce.number().int().positive(),
   store_name: z.string().optional(),
   purchased_on: z.string().min(10),
-  total_amount: z.preprocess((v) => (v === '' ? undefined : v), z.coerce.number().min(0).optional()),
+  total_amount: formOptionalNumber({ min: 0 }),
   source_type: z.enum(['manual', 'ocr_text', 'integration']).optional(),
   notes: z.string().optional(),
   year: z.string().optional()

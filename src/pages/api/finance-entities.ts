@@ -3,12 +3,13 @@ import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { addFinanceEntity } from '@/lib/services/finance-entities';
 import { normalizeReportYear } from '@/lib/utils/year';
+import { formOptionalNumber, formTrimmedString } from '@/lib/validation/form';
 
 const schema = z.object({
-  name: z.string().min(1),
+  name: formTrimmedString(),
   kind: z.enum(['person', 'business']),
   ownership_type: z.string().optional(),
-  ownership_percent: z.preprocess((v) => (v === '' ? undefined : v), z.coerce.number().min(0).max(100).optional()),
+  ownership_percent: formOptionalNumber({ min: 0, max: 100 }),
   tax_classification: z.string().optional(),
   notes: z.string().optional(),
   year: z.string().optional()

@@ -3,32 +3,18 @@ import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { upsertEnergyProfile } from '@/lib/services/energy';
 import { normalizeReportYear } from '@/lib/utils/year';
-
-const optionalNumber = (min: number) =>
-  z.preprocess(
-    (value) => (value === '' || value === null || value === undefined ? undefined : value),
-    z.coerce.number().min(min).optional()
-  );
-
-const optionalInt = (min: number) =>
-  z.preprocess(
-    (value) => (value === '' || value === null || value === undefined ? undefined : value),
-    z.coerce.number().int().min(min).optional()
-  );
+import { formOptionalFlag, formOptionalInt, formOptionalNumber } from '@/lib/validation/form';
 
 const schema = z.object({
   year: z.string().optional(),
-  home_sqft: optionalNumber(0),
-  occupants: optionalInt(0),
-  utility_rate_per_kwh: optionalNumber(0),
-  target_monthly_kwh: optionalNumber(0),
-  roof_solar_score: z.preprocess(
-    (value) => (value === '' || value === null || value === undefined ? undefined : value),
-    z.coerce.number().int().min(1).max(10).optional()
-  ),
-  owns_home: z.coerce.number().optional(),
-  has_solar: z.coerce.number().optional(),
-  green_utility_plan: z.coerce.number().optional(),
+  home_sqft: formOptionalNumber({ min: 0 }),
+  occupants: formOptionalInt({ min: 0 }),
+  utility_rate_per_kwh: formOptionalNumber({ min: 0 }),
+  target_monthly_kwh: formOptionalNumber({ min: 0 }),
+  roof_solar_score: formOptionalInt({ min: 1, max: 10 }),
+  owns_home: formOptionalFlag(),
+  has_solar: formOptionalFlag(),
+  green_utility_plan: formOptionalFlag(),
   notes: z.string().optional()
 });
 

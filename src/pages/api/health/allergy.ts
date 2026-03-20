@@ -3,13 +3,14 @@ import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { addAllergy } from '@/lib/services/health';
 import { normalizeReportYear } from '@/lib/utils/year';
+import { formOptionalNumber, formTrimmedString } from '@/lib/validation/form';
 
 const schema = z.object({
   member_id: z.coerce.number().min(1),
-  allergen: z.string().min(1),
-  reaction: z.string().min(1),
+  allergen: formTrimmedString(),
+  reaction: formTrimmedString(),
   severity: z.coerce.number().min(1).max(5),
-  has_epinephrine: z.coerce.number().optional(),
+  has_epinephrine: formOptionalNumber(),
   notes: z.string().optional(),
   year: z.string().optional()
 });

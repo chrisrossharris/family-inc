@@ -3,13 +3,14 @@ import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { normalizeReportYear } from '@/lib/utils/year';
 import { addFamilyGoal, updateFamilyGoal } from '@/lib/services/pillars';
+import { formOptionalInt, formOptionalNumber, formTrimmedString } from '@/lib/validation/form';
 
 const schema = z.object({
-  id: z.coerce.number().int().positive().optional(),
-  goal_title: z.string().min(1),
-  domain: z.string().min(1),
+  id: formOptionalInt({ positive: true }),
+  goal_title: formTrimmedString(),
+  domain: formTrimmedString(),
   target_date: z.string().optional(),
-  progress_pct: z.coerce.number().min(0).max(100).optional(),
+  progress_pct: formOptionalNumber({ min: 0, max: 100 }),
   status: z.enum(['active', 'on_hold', 'completed']).optional(),
   notes: z.string().optional(),
   year: z.string().optional()

@@ -3,13 +3,14 @@ import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { addSymptomLog } from '@/lib/services/health';
 import { normalizeReportYear } from '@/lib/utils/year';
+import { formOptionalNumber, formTrimmedString } from '@/lib/validation/form';
 
 const schema = z.object({
-  member_id: z.coerce.number().optional(),
+  member_id: formOptionalNumber(),
   occurred_on: z.string().min(10),
-  symptom: z.string().min(1),
+  symptom: formTrimmedString(),
   severity: z.coerce.number().min(1).max(5),
-  duration_hours: z.coerce.number().optional(),
+  duration_hours: formOptionalNumber(),
   trigger: z.string().optional(),
   notes: z.string().optional(),
   year: z.string().optional()

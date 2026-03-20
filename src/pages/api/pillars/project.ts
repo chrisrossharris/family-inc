@@ -3,10 +3,11 @@ import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { normalizeReportYear } from '@/lib/utils/year';
 import { addFamilyProject, updateFamilyProject } from '@/lib/services/pillars';
+import { formOptionalInt, formTrimmedString } from '@/lib/validation/form';
 
 const schema = z.object({
-  id: z.coerce.number().int().positive().optional(),
-  title: z.string().min(1),
+  id: formOptionalInt({ positive: true }),
+  title: formTrimmedString(),
   owner_name: z.string().optional(),
   status: z.enum(['active', 'on_hold', 'completed']).optional(),
   priority: z.enum(['low', 'medium', 'high']).optional(),

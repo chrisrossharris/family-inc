@@ -3,13 +3,14 @@ import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { normalizeReportYear } from '@/lib/utils/year';
 import { addTripItem } from '@/lib/services/pillars';
+import { formOptionalNumber, formTrimmedString } from '@/lib/validation/form';
 
 const schema = z.object({
   trip_id: z.coerce.number().min(1),
-  item_name: z.string().min(1),
+  item_name: formTrimmedString(),
   category: z.string().optional(),
-  qty: z.coerce.number().min(1).optional(),
-  packed: z.coerce.number().optional(),
+  qty: formOptionalNumber({ min: 1 }),
+  packed: formOptionalNumber(),
   notes: z.string().optional(),
   year: z.string().optional()
 });

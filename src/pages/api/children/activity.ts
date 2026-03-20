@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { normalizeReportYear } from '@/lib/utils/year';
 import { addChildActivity } from '@/lib/services/children';
+import { formOptionalNumber } from '@/lib/validation/form';
 
 const schema = z.object({
   member_id: z.coerce.number().min(1),
@@ -11,7 +12,7 @@ const schema = z.object({
   schedule: z.string().optional(),
   mentor_or_coach: z.string().optional(),
   status: z.enum(['active', 'paused', 'completed']).optional(),
-  monthly_cost: z.coerce.number().optional(),
+  monthly_cost: formOptionalNumber(),
   notes: z.string().optional(),
   year: z.string().optional()
 });

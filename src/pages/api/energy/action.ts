@@ -4,15 +4,16 @@ import { resolveSession } from '@/lib/auth/session';
 import db from '@/lib/db/connection';
 import { addEnergyAction, updateEnergyActionStatus } from '@/lib/services/energy';
 import { normalizeReportYear } from '@/lib/utils/year';
+import { formOptionalNumber, formTrimmedString } from '@/lib/validation/form';
 
 const createSchema = z.object({
   year: z.string().optional(),
-  action_name: z.string().min(1),
+  action_name: formTrimmedString(),
   category: z.enum(['efficiency', 'solar', 'renewable', 'behavior', 'upgrade']),
   priority: z.enum(['low', 'medium', 'high']).optional(),
-  estimated_annual_kwh_savings: z.coerce.number().min(0).optional(),
-  estimated_annual_cost_savings: z.coerce.number().min(0).optional(),
-  estimated_upfront_cost: z.coerce.number().min(0).optional(),
+  estimated_annual_kwh_savings: formOptionalNumber({ min: 0 }),
+  estimated_annual_cost_savings: formOptionalNumber({ min: 0 }),
+  estimated_upfront_cost: formOptionalNumber({ min: 0 }),
   notes: z.string().optional()
 });
 

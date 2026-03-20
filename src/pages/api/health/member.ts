@@ -3,14 +3,15 @@ import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { createOrUpdateFamilyMember } from '@/lib/services/health';
 import { normalizeReportYear } from '@/lib/utils/year';
+import { formOptionalFlag, formOptionalNumber, formTrimmedString } from '@/lib/validation/form';
 
 const schema = z.object({
-  id: z.coerce.number().optional(),
-  name: z.string().min(1),
-  relation: z.string().min(1),
+  id: formOptionalNumber(),
+  name: formTrimmedString(),
+  relation: formTrimmedString(),
   birth_date: z.string().optional(),
   notes: z.string().optional(),
-  is_active: z.coerce.number().optional(),
+  is_active: formOptionalFlag(),
   year: z.string().optional()
 });
 

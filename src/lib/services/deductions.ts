@@ -11,6 +11,33 @@ export interface DeductionRecord {
   updated_at: string;
 }
 
+export function estimateDeduction(type: DeductionType, payloadInput: Record<string, unknown>): number {
+  const payload = payloadInput as Record<string, number | boolean>;
+
+  if (type === 'home_office') {
+    const totalSqft = Math.max(Number(payload.totalSqft || 1), 1);
+    const businessSqft = Number(payload.businessSqft || 0);
+    const businessPct = businessSqft / totalSqft;
+    const annual =
+      Number(payload.mortgageInterest || 0) +
+      Number(payload.utilities || 0) +
+      Number(payload.insurance || 0) +
+      Number(payload.repairs || 0);
+    return annual * businessPct;
+  }
+
+  if (type === 'mileage') {
+    return Number(payload.businessMiles || 0) * Number(payload.irsRate || 0.67);
+  }
+
+  if (type === 'phone') {
+    return Number(payload.annualCost || 0) * (Number(payload.businessPct || 0) / 100);
+  }
+
+  const totalCost = Number(payload.totalCost || 0);
+  return payload.section179 ? totalCost : totalCost * 0.2;
+}
+
 export async function upsertDeduction(tenantId: string, entity: Entity, type: DeductionType, payload: Record<string, unknown>) {
   await db.run(
     `INSERT INTO deductions (tenant_id, entity, type, payload_json, created_at, updated_at)
@@ -38,29 +65,7 @@ export async function calculateDeductionTotals(tenantId: string, entity: Entity)
   let total = 0;
 
   for (const record of records) {
-    const payload = record.payload as Record<string, number>;
-
-    if (record.type === 'home_office') {
-      const businessPct = (payload.businessSqft || 0) / Math.max(payload.totalSqft || 1, 1);
-      const annual =
-        (payload.mortgageInterest || 0) +
-        (payload.utilities || 0) +
-        (payload.insurance || 0) +
-        (payload.repairs || 0);
-      total += annual * businessPct;
-    }
-
-    if (record.type === 'mileage') {
-      total += (payload.businessMiles || 0) * (payload.irsRate || 0.67);
-    }
-
-    if (record.type === 'phone') {
-      total += (payload.annualCost || 0) * ((payload.businessPct || 0) / 100);
-    }
-
-    if (record.type === 'equipment') {
-      total += payload.section179 ? payload.totalCost || 0 : (payload.totalCost || 0) * 0.2;
-    }
+    total += estimateDeduction(record.type, (record.payload ?? {}) as Record<string, unknown>);
   }
 
   return total;

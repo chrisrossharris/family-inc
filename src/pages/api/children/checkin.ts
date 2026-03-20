@@ -3,16 +3,17 @@ import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { normalizeReportYear } from '@/lib/utils/year';
 import { addChildCheckin } from '@/lib/services/children';
+import { formOptionalNumber } from '@/lib/validation/form';
 
 const schema = z.object({
   member_id: z.coerce.number().min(1),
   checkin_date: z.string().min(10),
   mood: z.coerce.number().min(1).max(5),
-  sleep_hours: z.coerce.number().optional(),
-  reading_minutes: z.coerce.number().optional(),
-  movement_minutes: z.coerce.number().optional(),
-  screen_time_minutes: z.coerce.number().optional(),
-  social_connection: z.coerce.number().min(1).max(5).optional(),
+  sleep_hours: formOptionalNumber(),
+  reading_minutes: formOptionalNumber(),
+  movement_minutes: formOptionalNumber(),
+  screen_time_minutes: formOptionalNumber(),
+  social_connection: formOptionalNumber({ min: 1, max: 5 }),
   notes: z.string().optional(),
   year: z.string().optional()
 });

@@ -3,14 +3,15 @@ import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { normalizeReportYear } from '@/lib/utils/year';
 import { addGroceryItem, updateGroceryItem } from '@/lib/services/pillars';
+import { formOptionalFlag, formOptionalInt, formOptionalNumber, formTrimmedString } from '@/lib/validation/form';
 
 const schema = z.object({
-  id: z.coerce.number().int().positive().optional(),
-  item_name: z.string().min(1),
-  category: z.string().min(1),
-  quantity: z.coerce.number().optional(),
+  id: formOptionalInt({ positive: true }),
+  item_name: formTrimmedString(),
+  category: formTrimmedString(),
+  quantity: formOptionalNumber(),
   unit: z.string().optional(),
-  needed: z.coerce.number().optional(),
+  needed: formOptionalFlag(),
   last_purchased_on: z.string().optional(),
   notes: z.string().optional(),
   year: z.string().optional()
