@@ -360,6 +360,9 @@ async function runMigrations() {
 }
 
 async function seedDefaultTenant() {
+  const shouldSeedDemoData = !postgresMode && process.env.ENABLE_DEMO_SEED !== '0';
+  if (!shouldSeedDemoData) return;
+
   const insertTenant =
     "INSERT INTO tenants (id, slug, name) VALUES ('harris_holdings', 'harris-holdings', 'Harris Holdings') ON CONFLICT (id) DO NOTHING";
   const insertUser =
