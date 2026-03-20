@@ -313,12 +313,13 @@ export async function setGroceryItemNeeded(input: {
   itemId: number;
   needed: 0 | 1;
 }) {
+  const today = new Date().toISOString().slice(0, 10);
   await db.run(
     `UPDATE home_grocery_items
      SET needed = ?,
-         last_purchased_on = CASE WHEN ? = 0 THEN DATE('now') ELSE last_purchased_on END
+         last_purchased_on = CASE WHEN ? = 0 THEN ? ELSE last_purchased_on END
      WHERE tenant_id = ? AND id = ?`,
-    [input.needed, input.needed, input.tenantId, input.itemId]
+    [input.needed, input.needed, today, input.tenantId, input.itemId]
   );
 }
 

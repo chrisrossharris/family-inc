@@ -19,27 +19,37 @@ const schema = z.object({
 });
 
 export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => {
-  const parsed = schema.safeParse(Object.fromEntries((await request.formData()).entries()));
+  const form = await request.formData();
+  const parsed = schema.safeParse(Object.fromEntries(form.entries()));
+  const fallbackYear = normalizeReportYear(String(form.get('year') ?? ''));
+  const errorTarget = new URL('/energy', request.url);
+  errorTarget.searchParams.set('year', fallbackYear);
+  errorTarget.searchParams.set('error', 'bill_invalid');
+
   if (!parsed.success) {
-    return new Response(JSON.stringify({ error: parsed.error.flatten() }), { status: 400 });
+    return redirect(errorTarget.pathname + errorTarget.search, 303);
   }
 
   const session = resolveSession(locals, cookies);
   const year = normalizeReportYear(parsed.data.year);
 
-  await addEnergyBill({
-    tenantId: session.tenantId,
-    billMonth: parsed.data.bill_month,
-    providerName: parsed.data.provider_name,
-    sourceType: parsed.data.source_type,
-    kwhUsed: parsed.data.kwh_used,
-    costAmount: parsed.data.cost_amount,
-    peakKwh: parsed.data.peak_kwh,
-    offPeakKwh: parsed.data.off_peak_kwh,
-    renewablePct: parsed.data.renewable_pct,
-    solarExportKwh: parsed.data.solar_export_kwh,
-    notes: parsed.data.notes || null
-  });
+  try {
+    await addEnergyBill({
+      tenantId: session.tenantId,
+      billMonth: parsed.data.bill_month,
+      providerName: parsed.data.provider_name,
+      sourceType: parsed.data.source_type,
+      kwhUsed: parsed.data.kwh_used,
+      costAmount: parsed.data.cost_amount,
+      peakKwh: parsed.data.peak_kwh,
+      offPeakKwh: parsed.data.off_peak_kwh,
+      renewablePct: parsed.data.renewable_pct,
+      solarExportKwh: parsed.data.solar_export_kwh,
+      notes: parsed.data.notes || null
+    });
+  } catch {
+    return redirect(errorTarget.pathname + errorTarget.search, 303);
+  }
 
   return redirect(`/energy?year=${year}&saved=bill`, 303);
 };

@@ -7,6 +7,7 @@ import { formatCurrency } from '@/lib/utils/format';
 const tenantId = Astro.locals.tenantId;
 const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
 const saved = Astro.url.searchParams.get('saved');
+const error = Astro.url.searchParams.get('error');
 const overview = await getEnergyOverview(tenantId, selectedYear);
 
 const usageIntensity = overview.profile?.home_sqft && overview.profile.home_sqft > 0 ? overview.stats.totalElectricKwh / overview.profile.home_sqft : null;
@@ -28,6 +29,7 @@ function usageLabelForSource(source: string): string {
 
 <BaseLayout title="Energy" subtitle="Track household energy consumption and cut waste with practical renewable scenarios.">
   {saved && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Saved: {saved}</div>}
+  {error && <div class="mb-4 border border-red-300 bg-red-50 p-3 text-sm text-red-900">Could not save utility bill. Check month/provider fields and try again.</div>}
   <p class="mb-4 text-xs uppercase tracking-report text-muted">Electric and gas are tracked separately. kWh KPIs are electricity-only.</p>
 
   <section class="kpi-grid md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-10">

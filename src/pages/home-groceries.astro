@@ -7,6 +7,7 @@ import { getHomeGroceriesOverview } from '@/lib/services/pillars';
 const tenantId = Astro.locals.tenantId;
 const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
 const saved = Astro.url.searchParams.get('saved');
+const error = Astro.url.searchParams.get('error');
 const overview = await getHomeGroceriesOverview(tenantId, selectedYear);
 
 const neededItems = overview.items.filter((item) => item.needed);
@@ -19,6 +20,7 @@ const averageReceipt = overview.stats.receiptCount > 0 ? overview.stats.receiptS
 
 <BaseLayout title="Home & Groceries" subtitle="Family pantry control center with shopping workflow and receipt intelligence.">
   {saved && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Saved: {saved}</div>}
+  {error && <div class="mb-4 border border-red-300 bg-red-50 p-3 text-sm text-red-900">Could not update grocery item. Refresh and try again.</div>}
 
   <section class="panel mb-4">
     <div class="flex flex-wrap items-center justify-between gap-3">

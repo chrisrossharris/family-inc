@@ -9,44 +9,274 @@ const entities = await listFinanceEntityOptions(tenantId);
 const records = await getDeductions(tenantId);
 const totalsByEntity = new Map<string, number>();
 
-for (const entity of entities) {
-  totalsByEntity.set(entity.code, await calculateDeductionTotals(tenantId, entity.code));
+for (const entity of entities) totalsByEntity.set(entity.code, await calculateDeductionTotals(tenantId, entity.code));
+
+const requestedEntity = Astro.url.searchParams.get('entity') ?? '';
+const selectedEntityCode = entities.some((entity) => entity.code === requestedEntity) ? requestedEntity : entities[0]?.code ?? 'big_picture';
+const selectedEntity = entities.find((entity) => entity.code === selectedEntityCode);
+const selectedYear = Astro.url.searchParams.get('year');
+const saved = Astro.url.searchParams.get('saved');
+
+const returnTo = (savedValue: string) => {
+  const next = new URL('/deductions', Astro.url);
+  if (selectedYear) next.searchParams.set('year', selectedYear);
+  next.searchParams.set('entity', selectedEntityCode);
+  next.searchParams.set('saved', savedValue);
+  return `${next.pathname}${next.search}`;
+};
+
+function recordFor(entity: string, type: string) {
+  return records.find((row) => row.entity === entity && row.type === type);
+}
+
+function payloadNumber(payload: Record<string, unknown> | undefined, key: string, fallback = 0): number {
+  if (!payload) return fallback;
+  const value = Number(payload[key]);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function payloadBool(payload: Record<string, unknown> | undefined, key: string, fallback = false): boolean {
+  if (!payload || payload[key] === undefined) return fallback;
+  const raw = payload[key];
+  if (typeof raw === 'boolean') return raw;
+  if (typeof raw === 'number') return raw !== 0;
+  if (typeof raw === 'string') return ['1', 'true', 'yes', 'on'].includes(raw.toLowerCase());
+  return fallback;
+}
+
+function estimate(type: 'home_office' | 'mileage' | 'phone' | 'equipment', payload: Record<string, unknown> | undefined): number {
+  if (!payload) return 0;
+  if (type === 'home_office') {
+    const totalSqft = Math.max(payloadNumber(payload, 'totalSqft', 1), 1);
+    const businessSqft = payloadNumber(payload, 'businessSqft');
+    const businessPct = businessSqft / totalSqft;
+    const annual =
+      payloadNumber(payload, 'mortgageInterest') +
+      payloadNumber(payload, 'utilities') +
+      payloadNumber(payload, 'insurance') +
+      payloadNumber(payload, 'repairs');
+    return annual * businessPct;
+  }
+  if (type === 'mileage') return payloadNumber(payload, 'businessMiles') * payloadNumber(payload, 'irsRate', 0.67);
+  if (type === 'phone') return payloadNumber(payload, 'annualCost') * (payloadNumber(payload, 'businessPct') / 100);
+  const totalCost = payloadNumber(payload, 'totalCost');
+  return payloadBool(payload, 'section179') ? totalCost : totalCost * 0.2;
+}
+
+const homeOfficePayload = recordFor(selectedEntityCode, 'home_office')?.payload as Record<string, unknown> | undefined;
+const mileagePayload = recordFor(selectedEntityCode, 'mileage')?.payload as Record<string, unknown> | undefined;
+const phonePayload = recordFor(selectedEntityCode, 'phone')?.payload as Record<string, unknown> | undefined;
+const equipmentPayload = recordFor(selectedEntityCode, 'equipment')?.payload as Record<string, unknown> | undefined;
+
+const homeOfficeEstimate = estimate('home_office', homeOfficePayload);
+const mileageEstimate = estimate('mileage', mileagePayload);
+const phoneEstimate = estimate('phone', phonePayload);
+const equipmentEstimate = estimate('equipment', equipmentPayload);
+const worksheetTotal = homeOfficeEstimate + mileageEstimate + phoneEstimate + equipmentEstimate;
+
+function hasMeaningfulPayload(payload: Record<string, unknown> | undefined): boolean {
+  if (!payload) return false;
+  for (const value of Object.values(payload)) {
+    if (typeof value === 'boolean' && value) return true;
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) return true;
+    if (typeof value === 'string' && value.trim().length > 0 && Number(value) > 0) return true;
+  }
+  return false;
+}
+
+const homeOfficeDone = hasMeaningfulPayload(homeOfficePayload);
+const mileageDone = hasMeaningfulPayload(mileagePayload);
+const phoneDone = hasMeaningfulPayload(phonePayload);
+const equipmentDone = hasMeaningfulPayload(equipmentPayload);
+const completedWorksheets = [homeOfficeDone, mileageDone, phoneDone, equipmentDone].filter(Boolean).length;
+
+function summarizePayload(type: string, payload: Record<string, unknown>): string {
+  if (type === 'home_office') {
+    const total = payloadNumber(payload, 'totalSqft', 1);
+    const business = payloadNumber(payload, 'businessSqft');
+    return `${business.toFixed(0)} / ${total.toFixed(0)} sqft (${((business / Math.max(total, 1)) * 100).toFixed(1)}%)`;
+  }
+  if (type === 'mileage') return `${payloadNumber(payload, 'businessMiles').toFixed(0)} miles @ ${payloadNumber(payload, 'irsRate', 0.67).toFixed(3)}`;
+  if (type === 'phone') return `${payloadNumber(payload, 'businessPct').toFixed(1)}% of ${formatCurrency(payloadNumber(payload, 'annualCost'))}`;
+  return `${formatCurrency(payloadNumber(payload, 'totalCost'))} • ${payloadBool(payload, 'section179') ? 'Section 179' : '20% depreciation'}`;
+}
+
+function summarizeRow(row: { type: string; payload: unknown }) {
+  return summarizePayload(row.type, (row.payload ?? {}) as Record<string, unknown>);
+}
+
+function estimateRow(row: { type: string; payload: unknown }) {
+  return estimate(row.type as 'home_office' | 'mileage' | 'phone' | 'equipment', (row.payload ?? {}) as Record<string, unknown>);
 }
 ---
 
-<BaseLayout title="Deductions" subtitle="Manual deduction worksheets with YTD estimates.">
+<BaseLayout title="Deductions" subtitle="Guided deduction worksheets for home office, mileage, phone/internet, and equipment.">
+  {saved && (
+    <section class="panel mb-4 border-emerald-300 bg-emerald-50/70">
+      <p class="panel-title text-emerald-900">Saved</p>
+      <p class="mt-1 text-sm text-emerald-900">Worksheet updated successfully.</p>
+    </section>
+  )}
+
   <section class="grid gap-4 md:grid-cols-3">
-    {entities.map((entity) => (
-      <article class="panel">
-        <h2 class="panel-title">Estimated Total Deductions ({entity.label})</h2>
-        <p class="mono-num mt-3 text-2xl text-accent">{formatCurrency(totalsByEntity.get(entity.code) ?? 0)}</p>
-        <p class="mt-2 text-xs text-muted">Business use: 32.7% of total home (override in payload).</p>
-        <a href={`/entity/${entity.code}`} class="mt-3 inline-block border border-grid px-2 py-1 text-xs uppercase tracking-report">Open entity ledger</a>
-      </article>
-    ))}
+    <article class="panel">
+      <p class="panel-title">How This Works</p>
+      <ol class="mt-2 list-decimal space-y-1 pl-5 text-sm text-muted">
+        <li>Pick an entity below.</li>
+        <li>Fill only the worksheets that apply this year.</li>
+        <li>Save each card. Estimates update immediately.</li>
+      </ol>
+    </article>
+    <article class="panel">
+      <p class="panel-title">Selected Entity</p>
+      <p class="mt-2 text-xl font-semibold">{selectedEntity?.label ?? selectedEntityCode}</p>
+      <p class="mt-2 text-xs text-muted">Use this as a planning estimate, then confirm with your CPA.</p>
+    </article>
+    <article class="panel">
+      <p class="panel-title">Estimated Total Deductions</p>
+      <p class="mono-num mt-2 text-2xl text-accent">{formatCurrency(totalsByEntity.get(selectedEntityCode) ?? 0)}</p>
+      <p class="mt-1 text-xs text-muted">From completed worksheets: {formatCurrency(worksheetTotal)}</p>
+      <a href={`/entity/${selectedEntityCode}`} class="mt-3 inline-block border border-grid px-2 py-1 text-xs uppercase tracking-report">Open entity ledger</a>
+    </article>
   </section>
 
   <section class="panel mt-4">
-    <h2 class="panel-title">Upsert Deduction Payload</h2>
-    <p class="mt-2 text-xs text-muted">Submit JSON payloads for `home_office`, `mileage`, `phone`, or `equipment`.</p>
-    <form method="post" action="/api/deductions" class="mt-3 grid gap-3 md:grid-cols-3">
-      <select name="entity">{entities.map((entity) => <option value={entity.code}>{entity.label}</option>)}</select>
-      <select name="type"><option value="home_office">home_office</option><option value="mileage">mileage</option><option value="phone">phone</option><option value="equipment">equipment</option></select>
-      <textarea name="payload_json" required class="md:col-span-3" rows="7" placeholder='{"totalSqft":2400,"businessSqft":785,"mortgageInterest":18000,"utilities":5400,"insurance":2200,"repairs":1200}'></textarea>
-      <button type="submit" class="md:col-span-3 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Deduction Input</button>
+    <h2 class="panel-title">Entity Scope</h2>
+    <form method="get" action="/deductions" class="mt-3 grid gap-3 md:grid-cols-[minmax(0,360px)_auto] md:items-end">
+      {selectedYear && <input type="hidden" name="year" value={selectedYear} />}
+      <label>
+        <span class="mb-1 block text-[10px] uppercase tracking-report text-muted">Entity</span>
+        <select name="entity" onchange="this.form.submit()">
+          {entities.map((entity) => <option value={entity.code} selected={entity.code === selectedEntityCode}>{entity.label}</option>)}
+        </select>
+      </label>
+      <p class="text-xs text-muted">Switch entity to maintain separate worksheets for each business/person.</p>
     </form>
   </section>
 
+  <section class="panel mt-4">
+    <h2 class="panel-title">Worksheet Progress</h2>
+    <div class="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+      <article class="border border-grid bg-white/50 p-3">
+        <p class="panel-title">Home Office</p>
+        <p class="mono-num mt-1 text-base">{formatCurrency(homeOfficeEstimate)}</p>
+        <p class:list={['mt-1 text-[10px] uppercase tracking-report', homeOfficeDone ? 'text-emerald-800' : 'text-amber-900']}>{homeOfficeDone ? 'Saved' : 'Needs Input'}</p>
+      </article>
+      <article class="border border-grid bg-white/50 p-3">
+        <p class="panel-title">Mileage</p>
+        <p class="mono-num mt-1 text-base">{formatCurrency(mileageEstimate)}</p>
+        <p class:list={['mt-1 text-[10px] uppercase tracking-report', mileageDone ? 'text-emerald-800' : 'text-amber-900']}>{mileageDone ? 'Saved' : 'Needs Input'}</p>
+      </article>
+      <article class="border border-grid bg-white/50 p-3">
+        <p class="panel-title">Phone / Internet</p>
+        <p class="mono-num mt-1 text-base">{formatCurrency(phoneEstimate)}</p>
+        <p class:list={['mt-1 text-[10px] uppercase tracking-report', phoneDone ? 'text-emerald-800' : 'text-amber-900']}>{phoneDone ? 'Saved' : 'Needs Input'}</p>
+      </article>
+      <article class="border border-grid bg-white/50 p-3">
+        <p class="panel-title">Equipment</p>
+        <p class="mono-num mt-1 text-base">{formatCurrency(equipmentEstimate)}</p>
+        <p class:list={['mt-1 text-[10px] uppercase tracking-report', equipmentDone ? 'text-emerald-800' : 'text-amber-900']}>{equipmentDone ? 'Saved' : 'Needs Input'}</p>
+      </article>
+    </div>
+    <p class="mt-3 text-sm text-muted">Completed {completedWorksheets} of 4 worksheets for {selectedEntity?.label ?? selectedEntityCode}.</p>
+  </section>
+
+  <section class="mt-4 grid gap-4 lg:grid-cols-2">
+    <article class="panel p-0">
+      <details class="form-card" open={!homeOfficeDone}>
+        <summary>
+          <span class="flex items-center justify-between gap-3">
+            <span>Home Office</span>
+            <span class="font-mono text-[11px]">{formatCurrency(homeOfficeEstimate)} · {homeOfficeDone ? 'Saved' : 'Needs Input'}</span>
+          </span>
+        </summary>
+      <form method="post" action="/api/deductions" class="grid gap-2 p-3 md:grid-cols-2">
+        <input type="hidden" name="entity" value={selectedEntityCode} />
+        <input type="hidden" name="type" value="home_office" />
+        <input type="hidden" name="return_to" value={returnTo('home_office')} />
+        <label><span class="mb-1 block text-[10px] uppercase tracking-report text-muted">Total Sq Ft</span><input type="number" step="1" min="1" name="totalSqft" value={payloadNumber(homeOfficePayload, 'totalSqft', 2400)} /></label>
+        <label><span class="mb-1 block text-[10px] uppercase tracking-report text-muted">Business Sq Ft</span><input type="number" step="1" min="0" name="businessSqft" value={payloadNumber(homeOfficePayload, 'businessSqft', 785)} /></label>
+        <label><span class="mb-1 block text-[10px] uppercase tracking-report text-muted">Mortgage Interest</span><input type="number" step="0.01" min="0" name="mortgageInterest" value={payloadNumber(homeOfficePayload, 'mortgageInterest', 0)} /></label>
+        <label><span class="mb-1 block text-[10px] uppercase tracking-report text-muted">Utilities</span><input type="number" step="0.01" min="0" name="utilities" value={payloadNumber(homeOfficePayload, 'utilities', 0)} /></label>
+        <label><span class="mb-1 block text-[10px] uppercase tracking-report text-muted">Insurance</span><input type="number" step="0.01" min="0" name="insurance" value={payloadNumber(homeOfficePayload, 'insurance', 0)} /></label>
+        <label><span class="mb-1 block text-[10px] uppercase tracking-report text-muted">Repairs</span><input type="number" step="0.01" min="0" name="repairs" value={payloadNumber(homeOfficePayload, 'repairs', 0)} /></label>
+        <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Home Office</button>
+      </form>
+      </details>
+    </article>
+
+    <article class="panel p-0">
+      <details class="form-card" open={!mileageDone}>
+        <summary>
+          <span class="flex items-center justify-between gap-3">
+            <span>Mileage</span>
+            <span class="font-mono text-[11px]">{formatCurrency(mileageEstimate)} · {mileageDone ? 'Saved' : 'Needs Input'}</span>
+          </span>
+        </summary>
+      <form method="post" action="/api/deductions" class="grid gap-2 p-3 md:grid-cols-2">
+        <input type="hidden" name="entity" value={selectedEntityCode} />
+        <input type="hidden" name="type" value="mileage" />
+        <input type="hidden" name="return_to" value={returnTo('mileage')} />
+        <label><span class="mb-1 block text-[10px] uppercase tracking-report text-muted">Business Miles</span><input type="number" step="1" min="0" name="businessMiles" value={payloadNumber(mileagePayload, 'businessMiles', 0)} /></label>
+        <label><span class="mb-1 block text-[10px] uppercase tracking-report text-muted">IRS Rate</span><input type="number" step="0.001" min="0" name="irsRate" value={payloadNumber(mileagePayload, 'irsRate', 0.67)} /></label>
+        <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Mileage</button>
+      </form>
+      </details>
+    </article>
+
+    <article class="panel p-0">
+      <details class="form-card" open={!phoneDone}>
+        <summary>
+          <span class="flex items-center justify-between gap-3">
+            <span>Phone & Internet</span>
+            <span class="font-mono text-[11px]">{formatCurrency(phoneEstimate)} · {phoneDone ? 'Saved' : 'Needs Input'}</span>
+          </span>
+        </summary>
+      <form method="post" action="/api/deductions" class="grid gap-2 p-3 md:grid-cols-2">
+        <input type="hidden" name="entity" value={selectedEntityCode} />
+        <input type="hidden" name="type" value="phone" />
+        <input type="hidden" name="return_to" value={returnTo('phone')} />
+        <label><span class="mb-1 block text-[10px] uppercase tracking-report text-muted">Annual Cost</span><input type="number" step="0.01" min="0" name="annualCost" value={payloadNumber(phonePayload, 'annualCost', 0)} /></label>
+        <label><span class="mb-1 block text-[10px] uppercase tracking-report text-muted">Business Use %</span><input type="number" step="0.1" min="0" max="100" name="businessPct" value={payloadNumber(phonePayload, 'businessPct', 0)} /></label>
+        <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Phone / Internet</button>
+      </form>
+      </details>
+    </article>
+
+    <article class="panel p-0">
+      <details class="form-card" open={!equipmentDone}>
+        <summary>
+          <span class="flex items-center justify-between gap-3">
+            <span>Equipment</span>
+            <span class="font-mono text-[11px]">{formatCurrency(equipmentEstimate)} · {equipmentDone ? 'Saved' : 'Needs Input'}</span>
+          </span>
+        </summary>
+      <form method="post" action="/api/deductions" class="grid gap-2 p-3 md:grid-cols-2">
+        <input type="hidden" name="entity" value={selectedEntityCode} />
+        <input type="hidden" name="type" value="equipment" />
+        <input type="hidden" name="return_to" value={returnTo('equipment')} />
+        <label><span class="mb-1 block text-[10px] uppercase tracking-report text-muted">Total Equipment Cost</span><input type="number" step="0.01" min="0" name="totalCost" value={payloadNumber(equipmentPayload, 'totalCost', 0)} /></label>
+        <label class="flex items-center gap-2 pt-5 text-sm">
+          <input type="checkbox" name="section179" checked={payloadBool(equipmentPayload, 'section179', false)} />
+          Use Section 179
+        </label>
+        <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Equipment</button>
+      </form>
+      </details>
+    </article>
+  </section>
+
   <section class="panel mt-4 overflow-x-auto">
-    <h2 class="panel-title">Saved Deduction Records</h2>
-    <table class="table-report mt-3 w-full min-w-[920px]">
-      <thead><tr><th>Entity</th><th>Type</th><th>Payload JSON</th><th>Updated</th></tr></thead>
+    <h2 class="panel-title">Saved Worksheets</h2>
+    <table class="table-report mt-3 w-full min-w-[840px]">
+      <thead><tr><th>Entity</th><th>Type</th><th>Snapshot</th><th>Estimated</th><th>Updated</th></tr></thead>
       <tbody>
         {records.map((row) => (
           <tr>
-            <td>{row.entity}</td>
-            <td>{row.type}</td>
-            <td class="font-mono text-xs">{JSON.stringify(row.payload)}</td>
+            <td>{entities.find((entity) => entity.code === row.entity)?.label ?? row.entity}</td>
+            <td>{row.type.replace('_', ' ')}</td>
+            <td>{summarizeRow(row)}</td>
+            <td class="mono-num">{formatCurrency(estimateRow(row))}</td>
             <td>{row.updated_at}</td>
           </tr>
         ))}

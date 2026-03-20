@@ -146,11 +146,53 @@ export async function ensureFinanceEntitiesForTenant(tenantId: string) {
   for (const member of members) {
     const preferred = slugify(firstWord(member.display_name));
     const code = dedupeCode(preferred || member.user_id, taken);
-    const byOwner = await db.get<{ count: number }>(
-      'SELECT COUNT(*) AS count FROM finance_entities WHERE tenant_id = ? AND owner_user_id = ? AND kind = ?',
+    const owned = await db.get<{ id: number; code: string }>(
+      `SELECT id, code
+       FROM finance_entities
+       WHERE tenant_id = ? AND owner_user_id = ? AND kind = ?
+       ORDER BY id ASC
+       LIMIT 1`,
       [tenantId, member.user_id, 'person']
     );
-    if ((byOwner?.count ?? 0) > 0) continue;
+    if (owned?.id) {
+      taken.add(owned.code);
+      continue;
+    }
+
+    const claimable = await db.get<{ id: number; code: string }>(
+      `SELECT id, code
+       FROM finance_entities
+       WHERE tenant_id = ?
+         AND kind = 'person'
+         AND owner_user_id IS NULL
+         AND (
+           code = ?
+           OR LOWER(name) = LOWER(?)
+           OR LOWER(name) = LOWER(?)
+         )
+       ORDER BY
+         CASE
+           WHEN code = ? THEN 0
+           WHEN LOWER(name) = LOWER(?) THEN 1
+           ELSE 2
+         END,
+         is_default DESC,
+         id ASC
+       LIMIT 1`,
+      [tenantId, preferred, member.display_name, firstWord(member.display_name), preferred, member.display_name]
+    );
+
+    if (claimable?.id) {
+      await db.run(
+        `UPDATE finance_entities
+         SET owner_user_id = ?, name = ?, is_active = 1, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [member.user_id, member.display_name, claimable.id]
+      );
+      taken.add(claimable.code);
+      continue;
+    }
+
     await createEntity({
       tenantId,
       code,

@@ -68,16 +68,16 @@ const pieSlices = pieData.map((row) => {
   {invalid > 0 && <div class="mb-4 border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Skipped {invalid} row{invalid === 1 ? '' : 's'} due to invalid values (date, payer/client, or gross amount missing).</div>}
 
   <section class="grid gap-4 md:grid-cols-4 lg:grid-cols-9">
-    <article class="panel"><p class="panel-title">Total Income</p><p class="mono-num mt-2 text-2xl">{formatCurrency(overview.stats.totalIncome)}</p></article>
-    <article class="panel"><p class="panel-title">Chris Income</p><p class="mono-num mt-2 text-2xl">{formatCurrency(overview.stats.chrisIncome)}</p></article>
-    <article class="panel"><p class="panel-title">Kate Income</p><p class="mono-num mt-2 text-2xl">{formatCurrency(overview.stats.kateIncome)}</p></article>
-    <article class="panel"><p class="panel-title">Big Picture Income</p><p class="mono-num mt-2 text-2xl">{formatCurrency(overview.stats.bigPictureIncome)}</p></article>
-    <article class="panel"><p class="panel-title">Allocation Rate</p><p class="mono-num mt-2 text-2xl">{formatPercent(overview.stats.allocationRate)}</p></article>
-    <article class="panel"><p class="panel-title">Other Sources</p><p class="mono-num mt-2 text-2xl">{formatCurrency(overview.stats.otherSourceIncome)}</p></article>
-    <article class="panel"><p class="panel-title">Unallocated</p><p class="mono-num mt-2 text-2xl">{formatCurrency(overview.stats.unallocatedIncome)}</p></article>
+    <article class="panel"><p class="panel-title">Total Income</p><p class="mono-num mt-2 text-xl">{formatCurrency(overview.stats.totalIncome)}</p></article>
+    <article class="panel"><p class="panel-title">Chris Income</p><p class="mono-num mt-2 text-xl">{formatCurrency(overview.stats.chrisIncome)}</p></article>
+    <article class="panel"><p class="panel-title">Kate Income</p><p class="mono-num mt-2 text-xl">{formatCurrency(overview.stats.kateIncome)}</p></article>
+    <article class="panel"><p class="panel-title">Big Picture Income</p><p class="mono-num mt-2 text-xl">{formatCurrency(overview.stats.bigPictureIncome)}</p></article>
+    <article class="panel"><p class="panel-title">Allocation Rate</p><p class="mono-num mt-2 text-xl">{formatPercent(overview.stats.allocationRate)}</p></article>
+    <article class="panel"><p class="panel-title">Other Sources</p><p class="mono-num mt-2 text-xl">{formatCurrency(overview.stats.otherSourceIncome)}</p></article>
+    <article class="panel"><p class="panel-title">Unallocated</p><p class="mono-num mt-2 text-xl">{formatCurrency(overview.stats.unallocatedIncome)}</p></article>
     <article class="panel"><p class="panel-title">Top Client</p><p class="mt-2 truncate text-sm">{overview.stats.topClientName ?? '—'}</p><p class="mono-num text-xs">{formatCurrency(overview.stats.topClientTotal)}</p></article>
-    <article class="panel"><p class="panel-title">Top Client Share</p><p class="mono-num mt-2 text-2xl">{formatPercent(overview.stats.topClientShare)}</p></article>
-    <article class="panel"><p class="panel-title">Receipts</p><p class="mono-num mt-2 text-2xl">{overview.stats.receiptsCount}</p></article>
+    <article class="panel"><p class="panel-title">Top Client Share</p><p class="mono-num mt-2 text-xl">{formatPercent(overview.stats.topClientShare)}</p></article>
+    <article class="panel"><p class="panel-title">Receipts</p><p class="mono-num mt-2 text-xl">{overview.stats.receiptsCount}</p></article>
   </section>
 
   <section class="mt-4 grid gap-4 lg:grid-cols-2">
