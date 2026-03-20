@@ -1,9 +1,14 @@
 import type { APIRoute } from 'astro';
 import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
-import { addEnergyBill } from '@/lib/services/energy';
+import { addEnergyBill, deleteEnergyBill } from '@/lib/services/energy';
 import { normalizeReportYear } from '@/lib/utils/year';
 import { formOptionalNumber, formTrimmedString } from '@/lib/validation/form';
+
+const deleteSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  year: z.string().optional()
+});
 
 const schema = z.object({
   year: z.string().optional(),
@@ -21,18 +26,34 @@ const schema = z.object({
 
 export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => {
   const form = await request.formData();
-  const parsed = schema.safeParse(Object.fromEntries(form.entries()));
-  const fallbackYear = normalizeReportYear(String(form.get('year') ?? ''));
+  const values = Object.fromEntries(form.entries());
+  const mode = typeof values.mode === 'string' ? values.mode : 'create';
+  const billMonthValue = String(form.get('bill_month') ?? '');
+  const fallbackYear = normalizeReportYear(billMonthValue.slice(0, 4) || String(form.get('year') ?? ''));
   const errorTarget = new URL('/energy', request.url);
   errorTarget.searchParams.set('year', fallbackYear);
   errorTarget.searchParams.set('error', 'bill_invalid');
 
+  if (mode === 'delete') {
+    const parsed = deleteSchema.safeParse(values);
+    if (!parsed.success) return redirect(errorTarget.pathname + errorTarget.search, 303);
+
+    const session = resolveSession(locals, cookies);
+    const year = normalizeReportYear(parsed.data.year);
+    await deleteEnergyBill({
+      tenantId: session.tenantId,
+      id: parsed.data.id
+    });
+    return redirect(`/energy?year=${year}&saved=bill_deleted`, 303);
+  }
+
+  const parsed = schema.safeParse(values);
   if (!parsed.success) {
     return redirect(errorTarget.pathname + errorTarget.search, 303);
   }
 
   const session = resolveSession(locals, cookies);
-  const year = normalizeReportYear(parsed.data.year);
+  const year = normalizeReportYear(parsed.data.bill_month.slice(0, 4) || parsed.data.year);
 
   try {
     await addEnergyBill({

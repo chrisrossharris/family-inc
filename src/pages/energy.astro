@@ -239,9 +239,9 @@ function usageLabelForSource(source: string): string {
     </details>
 
     <table class="table-report mt-4 w-full">
-      <thead><tr><th>Month</th><th>Provider</th><th>Source</th><th class="text-right">kWh</th><th class="text-right">Cost</th><th class="text-right">Renewable %</th></tr></thead>
+      <thead><tr><th>Month</th><th>Provider</th><th>Source</th><th class="text-right">kWh</th><th class="text-right">Cost</th><th class="text-right">Renewable %</th><th>Remove</th></tr></thead>
       <tbody>
-        {overview.bills.length === 0 && <tr><td colspan="6" class="text-xs text-muted">No utility bills logged yet.</td></tr>}
+        {overview.bills.length === 0 && <tr><td colspan="7" class="text-xs text-muted">No utility bills logged yet.</td></tr>}
         {overview.bills.slice(0, 24).map((bill) => (
           <tr>
             <td>{bill.bill_month.slice(0, 7)}</td>
@@ -250,6 +250,14 @@ function usageLabelForSource(source: string): string {
             <td class="mono-num">{bill.kwh_used.toFixed(0)} <span class="text-[10px] text-muted">{usageLabelForSource(bill.source_type)}</span></td>
             <td class="mono-num">{formatCurrency(bill.cost_amount)}</td>
             <td class="mono-num">{bill.renewable_pct.toFixed(1)}%</td>
+            <td>
+              <form method="post" action="/api/energy/bill" onsubmit="return confirm('Delete this utility bill?');">
+                <input type="hidden" name="mode" value="delete" />
+                <input type="hidden" name="id" value={bill.id} />
+                <input type="hidden" name="year" value={selectedYear} />
+                <button type="submit" class="border border-red-400 px-2 py-1 text-[10px] uppercase tracking-report text-red-700 hover:bg-red-50">Delete</button>
+              </form>
+            </td>
           </tr>
         ))}
       </tbody>
@@ -312,11 +320,8 @@ function usageLabelForSource(source: string): string {
       updateEnergyFormBySource();
     }
 
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initEnergyBillForm, { once: true });
-    } else {
-      initEnergyBillForm();
-    }
+    document.addEventListener('DOMContentLoaded', initEnergyBillForm, { once: true });
+    initEnergyBillForm();
     document.addEventListener('astro:page-load', initEnergyBillForm);
   </script>
 </BaseLayout>

@@ -166,6 +166,17 @@ export async function addEnergyBill(input: {
   );
 }
 
+export async function deleteEnergyBill(input: {
+  tenantId: string;
+  id: number;
+}) {
+  await db.run(
+    `DELETE FROM energy_bills
+     WHERE tenant_id = ? AND id = ?`,
+    [input.tenantId, input.id]
+  );
+}
+
 export async function addEnergyAction(input: {
   tenantId: string;
   actionName: string;
