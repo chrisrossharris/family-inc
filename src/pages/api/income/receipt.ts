@@ -19,7 +19,8 @@ const schema = z.object({
 });
 
 export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => {
-  const parsed = schema.safeParse(Object.fromEntries((await request.formData()).entries()));
+  const values = Object.fromEntries((await request.formData()).entries());
+  const parsed = schema.safeParse(values);
   if (!parsed.success) {
     return new Response(JSON.stringify({ error: parsed.error.flatten() }), { status: 400 });
   }
@@ -38,21 +39,24 @@ export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => 
 
   const session = resolveSession(locals, cookies);
   const year = normalizeReportYear(parsed.data.year);
-
-  await addIncomeReceipt({
-    tenantId: session.tenantId,
-    receivedDate: parsed.data.received_date,
-    sourceType: parsed.data.source_type,
-    payerName: parsed.data.payer_name,
-    projectName: parsed.data.project_name || null,
-    grossAmount: parsed.data.gross_amount,
-    notes: parsed.data.notes || null,
-    splits: [
-      { entity: 'chris', percent: normalizedChris },
-      { entity: 'kate', percent: normalizedKate },
-      { entity: 'big_picture', percent: normalizedBigPicture }
-    ]
-  });
+  try {
+    await addIncomeReceipt({
+      tenantId: session.tenantId,
+      receivedDate: parsed.data.received_date,
+      sourceType: parsed.data.source_type,
+      payerName: parsed.data.payer_name,
+      projectName: parsed.data.project_name || null,
+      grossAmount: parsed.data.gross_amount,
+      notes: parsed.data.notes || null,
+      splits: [
+        { entity: 'chris', percent: normalizedChris },
+        { entity: 'kate', percent: normalizedKate },
+        { entity: 'big_picture', percent: normalizedBigPicture }
+      ]
+    });
+  } catch {
+    return redirect(`/income?year=${year}&error=income_receipt`, 303);
+  }
 
   return redirect(`/income?year=${year}&saved=income`, 303);
 };

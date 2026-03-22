@@ -152,6 +152,36 @@ export async function getCategoryDistribution(tenantId: string, entity?: string,
     : db.all<{ category: string; total: number }>(sql, [tenantId, reportYear]);
 }
 
+export async function getEntityMonthlyCategoryMatrix(tenantId: string, entity: string, year?: string) {
+  const reportYear = yearParam(year);
+  const monthExpr = sqlMonthExpr('date');
+  const yearExpr = sqlYearExpr('date');
+  const rows = await db.all<{ category: string; month: string; total: number }>(
+    `SELECT category, ${monthExpr} AS month, SUM(amount) AS total
+     FROM transactions
+     WHERE tenant_id = ? AND entity = ? AND amount > 0 AND ${yearExpr} = ?
+     GROUP BY category, month
+     ORDER BY category ASC, month ASC`,
+    [tenantId, entity, reportYear]
+  );
+
+  const months = Array.from({ length: 12 }, (_, index) => `${reportYear}-${String(index + 1).padStart(2, '0')}`);
+  const matrix = new Map<string, Record<string, number>>();
+  for (const row of rows) {
+    const current = matrix.get(row.category) ?? Object.fromEntries(months.map((month) => [month, 0]));
+    current[row.month] = row.total;
+    matrix.set(row.category, current);
+  }
+
+  return Array.from(matrix.entries())
+    .map(([category, totals]) => ({
+      category,
+      months: months.map((month) => ({ month, total: totals[month] ?? 0 })),
+      total: months.reduce((sum, month) => sum + (totals[month] ?? 0), 0)
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
 export async function getTopVendors(tenantId: string, entity?: string, limit = 10, year?: string) {
   const reportYear = yearParam(year);
   const yearExpr = sqlYearExpr('date');

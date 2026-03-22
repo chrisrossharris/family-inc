@@ -67,27 +67,36 @@ export async function addIncomeReceipt(input: {
   let insertedId: number | null = null;
 
   await db.transaction(async (tx) => {
-    const inserted = await tx.get<{ id: number }>(
-      insertIgnore(
-        `INSERT OR IGNORE INTO income_receipts (tenant_id, received_date, source_type, payer_name, project_name, gross_amount, notes, import_hash, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-         RETURNING id`,
-        `INSERT INTO income_receipts (tenant_id, received_date, source_type, payer_name, project_name, gross_amount, notes, import_hash, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-         ON CONFLICT (tenant_id, import_hash) DO NOTHING
-         RETURNING id`
-      ),
-      [
-        input.tenantId,
-        input.receivedDate,
-        input.sourceType,
-        input.payerName,
-        input.projectName ?? null,
-        input.grossAmount,
-        input.notes ?? null,
-        input.importHash ?? null
-      ]
-    );
+    const insertParams = [
+      input.tenantId,
+      input.receivedDate,
+      input.sourceType,
+      input.payerName,
+      input.projectName ?? null,
+      input.grossAmount,
+      input.notes ?? null,
+      input.importHash ?? null
+    ];
+
+    const inserted = input.importHash
+      ? await tx.get<{ id: number }>(
+          insertIgnore(
+            `INSERT OR IGNORE INTO income_receipts (tenant_id, received_date, source_type, payer_name, project_name, gross_amount, notes, import_hash, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+             RETURNING id`,
+            `INSERT INTO income_receipts (tenant_id, received_date, source_type, payer_name, project_name, gross_amount, notes, import_hash, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+             ON CONFLICT (tenant_id, import_hash) DO NOTHING
+             RETURNING id`
+          ),
+          insertParams
+        )
+      : await tx.get<{ id: number }>(
+          `INSERT INTO income_receipts (tenant_id, received_date, source_type, payer_name, project_name, gross_amount, notes, import_hash, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+           RETURNING id`,
+          insertParams
+        );
 
     if (!inserted?.id) return;
     insertedAny = true;

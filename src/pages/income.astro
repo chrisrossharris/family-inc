@@ -7,6 +7,7 @@ import { normalizeReportYear } from '@/lib/utils/year';
 const tenantId = Astro.locals.tenantId;
 const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
 const saved = Astro.url.searchParams.get('saved');
+const error = Astro.url.searchParams.get('error');
 const updated = Number(Astro.url.searchParams.get('updated') ?? '0');
 const invalid = Number(Astro.url.searchParams.get('invalid') ?? '0');
 const importedIncome = Astro.url.searchParams.get('importedIncome') === '1';
@@ -54,6 +55,7 @@ const pieSlices = pieData.map((row) => {
 
 <BaseLayout title="Income" subtitle="Track earned income and support sources with clear split allocations by entity.">
   {saved && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Saved: {saved}</div>}
+  {error === 'income_receipt' && <div class="mb-4 border border-red-300 bg-red-50 p-3 text-sm text-red-900">Could not save income receipt. Try again or check the selected allocation.</div>}
   {importedIncome && (
     <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">
       Income import completed. Inserted: {insertedIncome} | Skipped: {skippedIncome} | Invalid: {invalidIncome}

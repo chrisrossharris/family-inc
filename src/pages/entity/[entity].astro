@@ -2,7 +2,7 @@
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { SCHEDULE_C_CATEGORIES } from '@/lib/constants';
 import { listFinanceEntityOptions } from '@/lib/services/finance-entities';
-import { getCategoryDistribution, getEntityLedger, getTopVendors } from '@/lib/services/reports';
+import { getCategoryDistribution, getEntityLedger, getEntityMonthlyCategoryMatrix, getTopVendors } from '@/lib/services/reports';
 import { formatCurrency } from '@/lib/utils/format';
 import { normalizeReportYear } from '@/lib/utils/year';
 
@@ -19,7 +19,17 @@ const updatedRows = Astro.url.searchParams.get('updated');
 const categoryRows = await getCategoryDistribution(tenantId, entity, selectedYear);
 const vendorRows = await getTopVendors(tenantId, entity, 15, selectedYear);
 const ledgerRows = await getEntityLedger(tenantId, entity, undefined, selectedYear);
+const monthlyMatrix = await getEntityMonthlyCategoryMatrix(tenantId, entity, selectedYear);
 const total = categoryRows.reduce((acc, row) => acc + row.total, 0);
+const monthColumns = Array.from({ length: 12 }, (_, index) => {
+  const month = `${selectedYear}-${String(index + 1).padStart(2, '0')}`;
+  const label = new Date(`${month}-01T00:00:00`).toLocaleString('en-US', { month: 'long' });
+  return { month, label };
+});
+const monthlyTotals = monthColumns.map((column) => ({
+  month: column.month,
+  total: monthlyMatrix.reduce((sum, row) => sum + (row.months.find((entry) => entry.month === column.month)?.total ?? 0), 0)
+}));
 ---
 
 <BaseLayout title={`${entityMeta.label} Detail`} subtitle="Entity operating ledger and controls.">
@@ -61,6 +71,45 @@ const total = categoryRows.reduce((acc, row) => acc + row.total, 0);
       </table>
       <a class="mt-4 inline-block border border-grid px-3 py-1 text-xs uppercase tracking-report" href={`/api/exports/${entity}.csv?year=${selectedYear}`}>Export {entityMeta.label} CSV</a>
     </article>
+  </section>
+
+  <section class="panel mt-4 overflow-x-auto">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h2 class="panel-title">Monthly Expense Matrix</h2>
+        <p class="mt-2 text-xs text-muted">Expenses are shown by payment month for {entityMeta.label}. This is the worksheet view for annual tax review and planning.</p>
+      </div>
+      <p class="text-[10px] uppercase tracking-report text-muted">Cash basis view • {selectedYear}</p>
+    </div>
+    <table class="table-report mt-4 w-full min-w-[1400px]">
+      <thead>
+        <tr>
+          <th>Business Expense Category</th>
+          {monthColumns.map((column) => <th class="text-right">{column.label}</th>)}
+          <th class="text-right">Totals</th>
+        </tr>
+      </thead>
+      <tbody>
+        {monthlyMatrix.length === 0 && <tr><td colspan={14} class="text-xs text-muted">No categorized business expenses for this entity and year yet.</td></tr>}
+        {monthlyMatrix.map((row) => (
+          <tr>
+            <td>{row.category}</td>
+            {monthColumns.map((column) => {
+              const amount = row.months.find((entry) => entry.month === column.month)?.total ?? 0;
+              return <td class="mono-num">{amount > 0 ? formatCurrency(amount) : '—'}</td>;
+            })}
+            <td class="mono-num font-semibold">{formatCurrency(row.total)}</td>
+          </tr>
+        ))}
+        {monthlyMatrix.length > 0 && (
+          <tr>
+            <td class="font-semibold">Total</td>
+            {monthlyTotals.map((column) => <td class="mono-num font-semibold">{column.total > 0 ? formatCurrency(column.total) : formatCurrency(0)}</td>)}
+            <td class="mono-num font-semibold">{formatCurrency(monthlyTotals.reduce((sum, column) => sum + column.total, 0))}</td>
+          </tr>
+        )}
+      </tbody>
+    </table>
   </section>
 
   <section class="panel mt-4">
