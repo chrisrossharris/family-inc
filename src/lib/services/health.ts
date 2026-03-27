@@ -221,12 +221,13 @@ export async function addAppointment(input: {
   provider: string;
   appointmentType: string;
   status?: 'scheduled' | 'completed' | 'cancelled';
+  reviewStatus?: 'confirmed' | 'needs_review' | 'ignored';
   followUpDate?: string | null;
   notes?: string | null;
 }) {
   await db.run(
-    `INSERT INTO health_appointments (tenant_id, member_id, appointment_date, provider, appointment_type, status, follow_up_date, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO health_appointments (tenant_id, member_id, appointment_date, provider, appointment_type, status, review_status, follow_up_date, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       input.tenantId,
       input.memberId,
@@ -234,6 +235,7 @@ export async function addAppointment(input: {
       input.provider,
       input.appointmentType,
       input.status ?? 'scheduled',
+      input.reviewStatus ?? 'confirmed',
       input.followUpDate ?? null,
       input.notes ?? null
     ]
@@ -266,6 +268,19 @@ export async function updateAppointment(input: {
       input.tenantId,
       input.id
     ]
+  );
+}
+
+export async function updateAppointmentReviewStatus(input: {
+  tenantId: string;
+  id: number;
+  reviewStatus: 'confirmed' | 'needs_review' | 'ignored';
+}) {
+  await db.run(
+    `UPDATE health_appointments
+     SET review_status = ?
+     WHERE tenant_id = ? AND id = ?`,
+    [input.reviewStatus, input.tenantId, input.id]
   );
 }
 
@@ -341,15 +356,16 @@ export async function getHealthOverview(tenantId: string, year?: string) {
     provider: string;
     appointment_type: string;
     status: string;
+    review_status: 'confirmed' | 'needs_review' | 'ignored';
     follow_up_date: string | null;
     notes: string | null;
   }>(
-    `SELECT a.id, a.member_id, m.name AS member_name, a.appointment_date, a.provider, a.appointment_type, a.status, a.follow_up_date, a.notes
+    `SELECT a.id, a.member_id, m.name AS member_name, a.appointment_date, a.provider, a.appointment_type, a.status, a.review_status, a.follow_up_date, a.notes
      FROM health_appointments a
      LEFT JOIN family_members m ON m.id = a.member_id
      WHERE a.tenant_id = ?
-     ORDER BY a.appointment_date ASC
-     LIMIT 25`,
+     ORDER BY a.appointment_date DESC, a.id DESC
+     LIMIT 100`,
     [tenantId]
   );
 

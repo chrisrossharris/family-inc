@@ -193,6 +193,7 @@ CREATE TABLE IF NOT EXISTS health_appointments (
   provider TEXT NOT NULL,
   appointment_type TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('scheduled','completed','cancelled')) DEFAULT 'scheduled',
+  review_status TEXT NOT NULL CHECK (review_status IN ('confirmed','needs_review','ignored')) DEFAULT 'confirmed',
   follow_up_date TEXT,
   notes TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

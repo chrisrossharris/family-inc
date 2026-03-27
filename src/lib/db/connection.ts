@@ -109,7 +109,8 @@ const migrationStatements = [
   "ALTER TABLE deductions ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'harris_holdings'",
   'ALTER TABLE income_receipts ADD COLUMN import_hash TEXT',
   'ALTER TABLE invoice_payments ADD COLUMN income_receipt_id INTEGER',
-  'ALTER TABLE invoice_payments ADD COLUMN stripe_payment_intent_id TEXT'
+  'ALTER TABLE invoice_payments ADD COLUMN stripe_payment_intent_id TEXT',
+  "ALTER TABLE health_appointments ADD COLUMN review_status TEXT NOT NULL DEFAULT 'confirmed'"
 ];
 
 function mapParamsToPg(sql: string, params: SqlValue[]) {

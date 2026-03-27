@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
-import { addAppointment, deleteAppointment, updateAppointment } from '@/lib/services/health';
+import { addAppointment, deleteAppointment, updateAppointment, updateAppointmentReviewStatus } from '@/lib/services/health';
 import { normalizeReportYear } from '@/lib/utils/year';
 import { formOptionalInt } from '@/lib/validation/form';
 
@@ -22,10 +22,15 @@ const deleteSchema = z.object({
   year: z.string().optional()
 });
 
+const reviewSchema = z.object({
+  id: formOptionalInt({ positive: true }),
+  review_status: z.enum(['confirmed', 'needs_review', 'ignored']),
+  year: z.string().optional()
+});
+
 export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => {
   const values = Object.fromEntries((await request.formData()).entries());
   const mode = typeof values.mode === 'string' ? values.mode : 'create';
-  const parsed = schema.safeParse(values);
   const fallbackYear = normalizeReportYear(typeof values.year === 'string' ? values.year : undefined);
   if (mode === 'delete') {
     const parsedDelete = deleteSchema.safeParse(values);
@@ -36,6 +41,26 @@ export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => 
     await deleteAppointment({ tenantId: session.tenantId, id: parsedDelete.data.id });
     return redirect(`/health?year=${year}&saved=appointment_deleted`, 303);
   }
+
+  if (mode === 'review') {
+    const parsedReview = reviewSchema.safeParse(values);
+    if (!parsedReview.success || !parsedReview.data.id) return redirect(`/health?year=${fallbackYear}&error=appointment_invalid`, 303);
+
+    const session = resolveSession(locals, cookies);
+    const year = normalizeReportYear(parsedReview.data.year);
+    try {
+      await updateAppointmentReviewStatus({
+        tenantId: session.tenantId,
+        id: parsedReview.data.id,
+        reviewStatus: parsedReview.data.review_status
+      });
+    } catch {
+      return redirect(`/health?year=${year}&error=appointment_failed`, 303);
+    }
+    return redirect(`/health?year=${year}&saved=appointment_reviewed`, 303);
+  }
+
+  const parsed = schema.safeParse(values);
 
   if (!parsed.success) return redirect(`/health?year=${fallbackYear}&error=appointment_invalid`, 303);
 

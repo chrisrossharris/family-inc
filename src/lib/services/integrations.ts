@@ -128,8 +128,8 @@ export async function syncHealthCalendarFeed(input: {
 
       const insertedAppointment = await tx.run(
         `INSERT INTO health_appointments
-          (tenant_id, member_id, appointment_date, provider, appointment_type, status, notes)
-         VALUES (?, ?, ?, ?, ?, 'scheduled', ?)
+          (tenant_id, member_id, appointment_date, provider, appointment_type, status, review_status, notes)
+         VALUES (?, ?, ?, ?, ?, 'scheduled', 'needs_review', ?)
          RETURNING id`,
         [input.tenantId, feed.default_member_id, event.startDate, 'Google Calendar', event.summary, notes || null]
       );
