@@ -1,11 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createClient, type Client } from '@libsql/client';
 import { Pool, type PoolClient, type QueryResult } from 'pg';
 import { schemaSql } from './schema';
 import { postgresSchemaSql } from './schema-postgres';
 
-export type SqlValue = string | number | null;
+export type SqlValue = string | number | Uint8Array | null;
 
 export interface RunResult {
   changes: number;
@@ -17,6 +16,16 @@ interface DbClient {
   get<T>(sql: string, params?: SqlValue[]): Promise<T | undefined>;
   run(sql: string, params?: SqlValue[]): Promise<RunResult>;
   transaction<T>(fn: (tx: DbClient) => Promise<T>): Promise<T>;
+}
+
+function normalizeInsertedId(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'bigint') return Number(value);
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function resolveDatabaseUrl(): string {
@@ -51,12 +60,31 @@ if (isLocalFile) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
 }
 
-const libsqlClient: Client | null = libsqlMode
-  ? createClient({
-      url: libsqlUrl,
-      authToken: process.env.TURSO_AUTH_TOKEN
-    })
-  : null;
+type LibsqlClient = {
+  execute: (input: string | { sql: string; args?: SqlValue[] }) => Promise<{
+    rows?: Array<Record<string, unknown>>;
+    rowsAffected?: number;
+    lastInsertRowid?: bigint | number | null;
+  }>;
+  close: () => void;
+};
+
+let libsqlClientPromise: Promise<LibsqlClient | null> | null = null;
+
+async function getLibsqlClient(): Promise<LibsqlClient> {
+  if (!libsqlMode) throw new Error('libSQL client not initialized');
+  if (!libsqlClientPromise) {
+    libsqlClientPromise = import('@libsql/client').then(({ createClient }) =>
+      createClient({
+        url: libsqlUrl,
+        authToken: process.env.TURSO_AUTH_TOKEN
+      }) as LibsqlClient
+    );
+  }
+  const client = await libsqlClientPromise;
+  if (!client) throw new Error('libSQL client not initialized');
+  return client;
+}
 
 const pgPool: Pool | null = postgresMode
   ? new Pool({
@@ -101,7 +129,7 @@ async function runPg(sql: string, params: SqlValue[] = [], client?: PoolClient):
 }
 
 async function runLibsql(sql: string, params: SqlValue[] = []) {
-  if (!libsqlClient) throw new Error('libSQL client not initialized');
+  const libsqlClient = await getLibsqlClient();
   return libsqlClient.execute({ sql, args: params });
 }
 
@@ -405,7 +433,7 @@ const db: DbClient = {
     }
 
     const rs = await runLibsql(sql, params);
-    return rs.rows.map((row) => normalizeRow<T>(row));
+    return (rs.rows ?? []).map((row) => normalizeRow<T>(row));
   },
 
   async get<T>(sql: string, params: SqlValue[] = []) {
@@ -418,17 +446,17 @@ const db: DbClient = {
 
     if (postgresMode) {
       const rs = await runPg(sql, params);
-      const first = rs.rows[0] as { id?: number } | undefined;
+      const first = rs.rows[0] as { id?: unknown } | undefined;
       return {
         changes: rs.rowCount ?? 0,
-        lastInsertRowid: typeof first?.id === 'number' ? first.id : null
+        lastInsertRowid: normalizeInsertedId(first?.id)
       };
     }
 
     const rs = await runLibsql(sql, params);
     const lastInsertRowid = rs.lastInsertRowid === undefined || rs.lastInsertRowid === null ? null : Number(rs.lastInsertRowid);
     return {
-      changes: rs.rowsAffected,
+      changes: rs.rowsAffected ?? 0,
       lastInsertRowid: Number.isFinite(lastInsertRowid) ? lastInsertRowid : null
     };
   },
@@ -450,10 +478,10 @@ const db: DbClient = {
         },
         async run(sql: string, params: SqlValue[] = []) {
           const rs = await runPg(sql, params, client);
-          const first = rs.rows[0] as { id?: number } | undefined;
+          const first = rs.rows[0] as { id?: unknown } | undefined;
           return {
             changes: rs.rowCount ?? 0,
-            lastInsertRowid: typeof first?.id === 'number' ? first.id : null
+            lastInsertRowid: normalizeInsertedId(first?.id)
           };
         },
         async transaction<U>(innerFn: (tx: DbClient) => Promise<U>) {

@@ -2,13 +2,16 @@
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { normalizeReportYear } from '@/lib/utils/year';
 import { getHealthOverview, listFamilyMembers } from '@/lib/services/health';
+import { listHealthCalendarFeeds } from '@/lib/services/integrations';
 
 const tenantId = Astro.locals.tenantId;
 const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
 const saved = Astro.url.searchParams.get('saved');
+const error = Astro.url.searchParams.get('error');
 const members = await listFamilyMembers(tenantId);
 const allMembers = await listFamilyMembers(tenantId, { includeInactive: true });
 const overview = await getHealthOverview(tenantId, selectedYear);
+const calendarFeeds = await listHealthCalendarFeeds(tenantId);
 const totalEpisodes = overview.stats.symptomEntries;
 const highPct = totalEpisodes > 0 ? (overview.stats.highSeverityEpisodes / totalEpisodes) * 100 : 0;
 const scheduledAppointments = overview.upcomingApptList.filter((row) => row.status === 'scheduled');
@@ -34,6 +37,7 @@ const memberSnapshots = members.map((member) => {
 
 <BaseLayout title="Health & Wellness" subtitle="Parent care cockpit for children, spouse, and household wellness.">
   {saved && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Saved: {saved}</div>}
+  {error && <div class="mb-4 border border-red-300 bg-red-50 p-3 text-sm text-red-900">Could not save that health entry. Check the dates and member selection, then try again.</div>}
 
   <section class="panel mb-4">
     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -42,6 +46,7 @@ const memberSnapshots = members.map((member) => {
         <p class="mt-1 text-sm text-muted">Track who needs attention now, then log updates in one place.</p>
       </div>
       <div class="flex flex-wrap gap-2 text-[10px] uppercase tracking-report">
+        <a class="border border-grid px-2 py-1 hover:bg-ink hover:text-paper" href="#care-calendar">Care Calendar</a>
         <a class="border border-grid px-2 py-1 hover:bg-ink hover:text-paper" href="#symptom-log">Log Symptom</a>
         <a class="border border-grid px-2 py-1 hover:bg-ink hover:text-paper" href="#appointments">Schedule Appointment</a>
         <a class="border border-grid px-2 py-1 hover:bg-ink hover:text-paper" href="#allergies">Update Allergy</a>
@@ -62,16 +67,16 @@ const memberSnapshots = members.map((member) => {
   <section class="panel mt-4 overflow-x-auto">
     <h2 class="panel-title">Family Care Snapshot</h2>
     <table class="table-report mt-3 w-full min-w-[920px]">
-      <thead><tr><th>Member</th><th>Relation</th><th class="text-right">Recent Symptoms</th><th class="text-right">Active Allergies</th><th>Next Appointment</th><th>Status</th></tr></thead>
+      <thead><tr><th>Member</th><th>Relation</th><th class="mono-num text-left">Recent Symptoms</th><th class="mono-num text-left">Active Allergies</th><th class="text-left">Next Appointment</th><th class="text-center">Status</th></tr></thead>
       <tbody>
         {memberSnapshots.map((member) => (
           <tr>
             <td class="font-medium">{member.name}</td>
             <td>{member.relation}</td>
-            <td class="mono-num">{member.symptomCount}</td>
-            <td class="mono-num">{member.allergyCount}</td>
-            <td>{member.nextAppointment ?? '—'}</td>
-            <td>
+            <td class="mono-num text-left">{member.symptomCount}</td>
+            <td class="mono-num text-left">{member.allergyCount}</td>
+            <td class="text-left">{member.nextAppointment ?? '—'}</td>
+            <td class="text-center">
               {member.allergyCount > 0 || member.symptomCount > 2 ? (
                 <span class="inline-block border border-red-300 bg-red-50 px-2 py-1 text-[10px] uppercase tracking-report text-red-900">Watch</span>
               ) : (
@@ -82,6 +87,83 @@ const memberSnapshots = members.map((member) => {
         ))}
       </tbody>
     </table>
+  </section>
+
+  <section class="mt-4 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]" id="care-calendar">
+    <article class="panel">
+      <h2 class="panel-title">Care Calendar ({selectedYear})</h2>
+      <p class="mt-2 text-xs text-muted">Month-by-month view of sick days and appointments so parents can see care load, school absences, and follow-up cadence.</p>
+      <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {overview.careCalendar.map((month) => (
+          <div class="border border-grid bg-white/40 p-3">
+            <div class="flex items-center justify-between gap-3">
+              <p class="panel-title">{month.month}</p>
+              <p class="mono-num text-sm">{month.appointments.length + month.sickDays.length}</p>
+            </div>
+            <div class="mt-3 space-y-2 text-xs">
+              {month.appointments.slice(0, 3).map((appointment) => (
+                <div class="border border-grid p-2">
+                  <p class="font-medium">{appointment.appointment_date} · {appointment.member_name ?? 'Unassigned'}</p>
+                  <p class="text-muted">{appointment.provider} · {appointment.appointment_type}</p>
+                </div>
+              ))}
+              {month.sickDays.slice(0, 3).map((day) => (
+                <div class="border border-red-200 bg-red-50 p-2">
+                  <p class="font-medium text-red-900">{day.start_date}{day.end_date !== day.start_date ? ` → ${day.end_date}` : ''} · {day.member_name ?? 'Unassigned'}</p>
+                  <p class="text-red-800">{day.reason}</p>
+                </div>
+              ))}
+              {month.appointments.length === 0 && month.sickDays.length === 0 && <p class="text-muted">No health events logged.</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </article>
+
+    <article class="panel">
+      <h2 class="panel-title">Shared Calendar Integration</h2>
+      <p class="mt-2 text-xs text-muted">Paste the Google Calendar private iCal address for a shared calendar. Imported events land as appointments for the selected family member.</p>
+      <details class="form-card mt-3" open={calendarFeeds.length === 0}>
+        <summary>Add Google Calendar Feed</summary>
+        <form method="post" action="/api/health/calendar-feed" class="mt-3 grid gap-2">
+          <input type="hidden" name="year" value={selectedYear} />
+          <input type="text" name="feed_name" required placeholder="Feed name (Family calendar, Kate appointments)" />
+          <input type="url" name="ical_url" required placeholder="Google private iCal URL" />
+          <select name="default_member_id" required>
+            <option value="family_calendar">Family Calendar</option>
+            {members.map((member) => <option value={member.id}>{member.name}</option>)}
+          </select>
+          <label class="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="active" value="1" checked /> Active</label>
+          <button type="submit" class="border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Feed</button>
+        </form>
+      </details>
+      <div class="mt-3 space-y-3">
+        {calendarFeeds.length === 0 && <div class="border border-grid p-3 text-xs text-muted">No Google Calendar feeds connected yet.</div>}
+        {calendarFeeds.map((feed) => (
+          <div class="border border-grid p-3 text-xs">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p class="font-medium text-ink">{feed.feed_name}</p>
+                <p class="text-muted">{feed.default_member_name ?? 'No member assigned'} · {feed.last_synced_at ?? 'Never synced'}</p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <form method="post" action="/api/health/calendar-sync">
+                  <input type="hidden" name="year" value={selectedYear} />
+                  <input type="hidden" name="feed_id" value={feed.id} />
+                  <button type="submit" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Sync Now</button>
+                </form>
+                <form method="post" action="/api/health/calendar-feed">
+                  <input type="hidden" name="year" value={selectedYear} />
+                  <input type="hidden" name="id" value={feed.id} />
+                  <input type="hidden" name="mode" value="delete" />
+                  <button type="submit" class="border border-red-500 px-2 py-1 text-[10px] uppercase tracking-report text-red-700 hover:bg-red-600 hover:text-paper">Delete</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </article>
   </section>
 
   <section class="mt-4 grid items-start gap-4 lg:grid-cols-2">
@@ -178,6 +260,52 @@ const memberSnapshots = members.map((member) => {
         <button type="submit" class="border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Sick Day</button>
         </form>
       </details>
+      <table class="table-report mt-4 w-full">
+        <thead><tr><th>Dates</th><th>Member</th><th>Reason</th><th>Missed</th><th>Edit</th><th>Delete</th></tr></thead>
+        <tbody>
+          {overview.sickDayList.length === 0 && <tr><td colspan="6" class="text-xs text-muted">No sick days logged yet.</td></tr>}
+          {overview.sickDayList.slice(0, 10).map((row) => (
+            <tr>
+              <td>
+                <div class="edit-date-range">
+                  <input form={`sickday-edit-${row.id}`} type="date" name="start_date" value={row.start_date} class="text-xs" />
+                  <span class="text-xs text-muted">→</span>
+                  <input form={`sickday-edit-${row.id}`} type="date" name="end_date" value={row.end_date} class="text-xs" />
+                </div>
+              </td>
+              <td>
+                <select form={`sickday-edit-${row.id}`} name="member_id" class="text-xs">
+                  {allMembers.map((member) => <option value={member.id} selected={member.id === row.member_id}>{member.name}</option>)}
+                </select>
+              </td>
+              <td><input form={`sickday-edit-${row.id}`} type="text" name="reason" value={row.reason} class="text-xs" /></td>
+              <td>
+                <label class="inline-flex items-center gap-2 text-xs">
+                  <input form={`sickday-edit-${row.id}`} type="checkbox" name="school_work_missed" value="1" checked={row.school_work_missed === 1} />
+                  {row.school_work_missed === 1 ? 'Yes' : 'No'}
+                </label>
+                <input form={`sickday-edit-${row.id}`} type="hidden" name="fever" value={row.fever ? '1' : ''} />
+                <input form={`sickday-edit-${row.id}`} type="hidden" name="notes" value={row.notes ?? ''} />
+              </td>
+              <td><button form={`sickday-edit-${row.id}`} type="submit" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Save</button></td>
+              <td><button form={`sickday-delete-${row.id}`} type="submit" class="border border-red-500 px-2 py-1 text-[10px] uppercase tracking-report text-red-700 hover:bg-red-600 hover:text-paper">Delete</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {overview.sickDayList.slice(0, 10).map((row) => (
+        <>
+          <form id={`sickday-edit-${row.id}`} method="post" action="/api/health/sick-day" class="hidden">
+            <input type="hidden" name="year" value={selectedYear} />
+            <input type="hidden" name="id" value={row.id} />
+          </form>
+          <form id={`sickday-delete-${row.id}`} method="post" action="/api/health/sick-day" class="hidden">
+            <input type="hidden" name="year" value={selectedYear} />
+            <input type="hidden" name="id" value={row.id} />
+            <input type="hidden" name="mode" value="delete" />
+          </form>
+        </>
+      ))}
     </article>
 
     <article class="panel" id="allergies">
@@ -237,18 +365,49 @@ const memberSnapshots = members.map((member) => {
         </form>
       </details>
       <table class="table-report mt-4 w-full">
-        <thead><tr><th>Date</th><th>Member</th><th>Provider</th><th>Status</th></tr></thead>
+        <thead><tr><th>Date</th><th>Member</th><th>Provider</th><th>Status</th><th>Edit</th><th>Delete</th></tr></thead>
         <tbody>
+          {overview.upcomingApptList.length === 0 && <tr><td colspan="6" class="text-xs text-muted">No appointments logged yet.</td></tr>}
           {overview.upcomingApptList.map((row) => (
             <tr>
-              <td>{row.appointment_date}</td>
-              <td>{row.member_name ?? '—'}</td>
-              <td>{row.provider}</td>
-              <td>{row.status}</td>
+              <td><input form={`appointment-edit-${row.id}`} type="date" name="appointment_date" value={row.appointment_date} class="text-xs" /></td>
+              <td>
+                <select form={`appointment-edit-${row.id}`} name="member_id" class="text-xs">
+                  {allMembers.map((member) => <option value={member.id} selected={member.id === row.member_id}>{member.name}</option>)}
+                </select>
+              </td>
+              <td>
+                <input form={`appointment-edit-${row.id}`} type="text" name="provider" value={row.provider} class="text-xs" />
+                <input form={`appointment-edit-${row.id}`} type="hidden" name="appointment_type" value={row.appointment_type} />
+                <input form={`appointment-edit-${row.id}`} type="hidden" name="follow_up_date" value={row.follow_up_date ?? ''} />
+                <input form={`appointment-edit-${row.id}`} type="hidden" name="notes" value={row.notes ?? ''} />
+              </td>
+              <td>
+                <select form={`appointment-edit-${row.id}`} name="status" class="text-xs">
+                  <option value="scheduled" selected={row.status === 'scheduled'}>scheduled</option>
+                  <option value="completed" selected={row.status === 'completed'}>completed</option>
+                  <option value="cancelled" selected={row.status === 'cancelled'}>cancelled</option>
+                </select>
+              </td>
+              <td><button form={`appointment-edit-${row.id}`} type="submit" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Save</button></td>
+              <td><button form={`appointment-delete-${row.id}`} type="submit" class="border border-red-500 px-2 py-1 text-[10px] uppercase tracking-report text-red-700 hover:bg-red-600 hover:text-paper">Delete</button></td>
             </tr>
           ))}
         </tbody>
       </table>
+      {overview.upcomingApptList.map((row) => (
+        <>
+          <form id={`appointment-edit-${row.id}`} method="post" action="/api/health/appointment" class="hidden">
+            <input type="hidden" name="year" value={selectedYear} />
+            <input type="hidden" name="id" value={row.id} />
+          </form>
+          <form id={`appointment-delete-${row.id}`} method="post" action="/api/health/appointment" class="hidden">
+            <input type="hidden" name="year" value={selectedYear} />
+            <input type="hidden" name="id" value={row.id} />
+            <input type="hidden" name="mode" value="delete" />
+          </form>
+        </>
+      ))}
     </article>
 
     <article class="panel">

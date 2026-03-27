@@ -20,7 +20,7 @@ const averageReceipt = overview.stats.receiptCount > 0 ? overview.stats.receiptS
 
 <BaseLayout title="Home & Groceries" subtitle="Family pantry control center with shopping workflow and receipt intelligence.">
   {saved && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Saved: {saved}</div>}
-  {error && <div class="mb-4 border border-red-300 bg-red-50 p-3 text-sm text-red-900">Could not update grocery item. Refresh and try again.</div>}
+  {error && <div class="mb-4 border border-red-300 bg-red-50 p-3 text-sm text-red-900">Could not save that grocery item. Check the item name and category, then try again.</div>}
 
   <section class="panel mb-4">
     <div class="flex flex-wrap items-center justify-between gap-3">
@@ -57,7 +57,7 @@ const averageReceipt = overview.stats.receiptCount > 0 ? overview.stats.receiptS
         <form method="post" action="/api/pillars/grocery" class="mt-3 grid gap-2 md:grid-cols-2">
           <input type="hidden" name="year" value={selectedYear} />
           <input type="text" name="item_name" required placeholder="Item name" />
-          <input type="text" name="category" required placeholder="Category" />
+          <input type="text" name="category" placeholder="Category (optional, auto-detected if blank)" />
           <input type="number" name="quantity" step="0.25" min="0" placeholder="Quantity" />
           <input type="text" name="unit" placeholder="Unit (lb, pack, each)" />
           <input type="date" name="last_purchased_on" />

@@ -28,9 +28,21 @@ export function getStripeWebhookSecret(): string | null {
 }
 
 export function getStripePriceFamilyPlus(): string | null {
-  return readFirst(['STRIPE_PRICE_FAMILY_PLUS', 'STRIPE_PRICE_ID_FAMILY_PLUS', 'STRIPE_FAMILY_PLUS_PRICE_ID']);
+  return readFirst([
+    'STRIPE_PRICE_FAMILY_PLUS',
+    'STRIPE_PRICE_ID_FAMILY_PLUS',
+    'STRIPE_FAMILY_PLUS_PRICE_ID',
+    'PLUS_PRICE',
+    'STRIPE_PLUS_PRICE'
+  ]);
 }
 
 export function getStripePriceFamilyPro(): string | null {
-  return readFirst(['STRIPE_PRICE_FAMILY_PRO', 'STRIPE_PRICE_ID_FAMILY_PRO', 'STRIPE_FAMILY_PRO_PRICE_ID']);
+  return readFirst([
+    'STRIPE_PRICE_FAMILY_PRO',
+    'STRIPE_PRICE_ID_FAMILY_PRO',
+    'STRIPE_FAMILY_PRO_PRICE_ID',
+    'PRO_PRICE',
+    'STRIPE_PRO_PRICE'
+  ]);
 }

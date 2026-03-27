@@ -323,7 +323,7 @@ export async function setGroceryItemNeeded(input: {
   );
 }
 
-function inferGroceryCategory(name: string): string {
+export function inferGroceryCategory(name: string): string {
   const value = name.toLowerCase();
   if (/(milk|yogurt|cheese|butter|cream)/.test(value)) return 'Dairy';
   if (/(apple|banana|berry|lettuce|spinach|onion|pepper|tomato|produce)/.test(value)) return 'Produce';
@@ -695,6 +695,274 @@ export async function getMilestonesOverview(tenantId: string, year?: string) {
       milestonesThisYear: milestonesThisYear?.count ?? 0,
       familyMilestones: milestones.filter((m) => !m.member_name).length,
       memberMilestones: milestones.filter((m) => !!m.member_name).length
+    }
+  };
+}
+
+export async function addHouseAsset(input: {
+  tenantId: string;
+  assetName: string;
+  assetType: string;
+  category: string;
+  location?: string | null;
+  installDate?: string | null;
+  purchaseDate?: string | null;
+  warrantyExpires?: string | null;
+  expectedLifespanYears?: number | null;
+  conditionStatus?: string;
+  replacementPriority?: string;
+  vendorName?: string | null;
+  modelNumber?: string | null;
+  serialNumber?: string | null;
+  replacementCost?: number | null;
+  notes?: string | null;
+}) {
+  await db.run(
+    `INSERT INTO house_assets
+      (tenant_id, asset_name, asset_type, category, location, install_date, purchase_date, warranty_expires, expected_lifespan_years, condition_status, replacement_priority, vendor_name, model_number, serial_number, replacement_cost, notes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    [
+      input.tenantId,
+      input.assetName,
+      input.assetType,
+      input.category,
+      input.location ?? null,
+      input.installDate ?? null,
+      input.purchaseDate ?? null,
+      input.warrantyExpires ?? null,
+      input.expectedLifespanYears ?? null,
+      input.conditionStatus ?? 'good',
+      input.replacementPriority ?? 'medium',
+      input.vendorName ?? null,
+      input.modelNumber ?? null,
+      input.serialNumber ?? null,
+      input.replacementCost ?? 0,
+      input.notes ?? null
+    ]
+  );
+}
+
+export async function updateHouseAsset(input: {
+  tenantId: string;
+  id: number;
+  assetName: string;
+  assetType: string;
+  category: string;
+  location?: string | null;
+  installDate?: string | null;
+  purchaseDate?: string | null;
+  warrantyExpires?: string | null;
+  expectedLifespanYears?: number | null;
+  conditionStatus?: string;
+  replacementPriority?: string;
+  vendorName?: string | null;
+  modelNumber?: string | null;
+  serialNumber?: string | null;
+  replacementCost?: number | null;
+  notes?: string | null;
+}) {
+  await db.run(
+    `UPDATE house_assets
+     SET asset_name = ?, asset_type = ?, category = ?, location = ?, install_date = ?, purchase_date = ?, warranty_expires = ?, expected_lifespan_years = ?, condition_status = ?, replacement_priority = ?, vendor_name = ?, model_number = ?, serial_number = ?, replacement_cost = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE tenant_id = ? AND id = ?`,
+    [
+      input.assetName,
+      input.assetType,
+      input.category,
+      input.location ?? null,
+      input.installDate ?? null,
+      input.purchaseDate ?? null,
+      input.warrantyExpires ?? null,
+      input.expectedLifespanYears ?? null,
+      input.conditionStatus ?? 'good',
+      input.replacementPriority ?? 'medium',
+      input.vendorName ?? null,
+      input.modelNumber ?? null,
+      input.serialNumber ?? null,
+      input.replacementCost ?? 0,
+      input.notes ?? null,
+      input.tenantId,
+      input.id
+    ]
+  );
+}
+
+export async function deleteHouseAsset(input: {
+  tenantId: string;
+  id: number;
+}) {
+  await db.transaction(async (tx) => {
+    await tx.run(
+      `UPDATE house_maintenance_tasks
+       SET asset_id = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE tenant_id = ? AND asset_id = ?`,
+      [input.tenantId, input.id]
+    );
+
+    await tx.run(
+      `DELETE FROM house_assets
+       WHERE tenant_id = ? AND id = ?`,
+      [input.tenantId, input.id]
+    );
+  });
+}
+
+export async function addHouseTask(input: {
+  tenantId: string;
+  assetId?: number | null;
+  title: string;
+  taskType?: string;
+  cadenceMonths?: number | null;
+  lastCompletedOn?: string | null;
+  nextDueOn?: string | null;
+  status?: string;
+  estimatedCost?: number | null;
+  vendorName?: string | null;
+  notes?: string | null;
+}) {
+  await db.run(
+    `INSERT INTO house_maintenance_tasks
+      (tenant_id, asset_id, title, task_type, cadence_months, last_completed_on, next_due_on, status, estimated_cost, vendor_name, notes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    [
+      input.tenantId,
+      input.assetId ?? null,
+      input.title,
+      input.taskType ?? 'inspect',
+      input.cadenceMonths ?? null,
+      input.lastCompletedOn ?? null,
+      input.nextDueOn ?? null,
+      input.status ?? 'planned',
+      input.estimatedCost ?? 0,
+      input.vendorName ?? null,
+      input.notes ?? null
+    ]
+  );
+}
+
+export async function updateHouseTask(input: {
+  tenantId: string;
+  id: number;
+  assetId?: number | null;
+  title: string;
+  taskType?: string;
+  cadenceMonths?: number | null;
+  lastCompletedOn?: string | null;
+  nextDueOn?: string | null;
+  status?: string;
+  estimatedCost?: number | null;
+  vendorName?: string | null;
+  notes?: string | null;
+}) {
+  await db.run(
+    `UPDATE house_maintenance_tasks
+     SET asset_id = ?, title = ?, task_type = ?, cadence_months = ?, last_completed_on = ?, next_due_on = ?, status = ?, estimated_cost = ?, vendor_name = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE tenant_id = ? AND id = ?`,
+    [
+      input.assetId ?? null,
+      input.title,
+      input.taskType ?? 'inspect',
+      input.cadenceMonths ?? null,
+      input.lastCompletedOn ?? null,
+      input.nextDueOn ?? null,
+      input.status ?? 'planned',
+      input.estimatedCost ?? 0,
+      input.vendorName ?? null,
+      input.notes ?? null,
+      input.tenantId,
+      input.id
+    ]
+  );
+}
+
+export async function deleteHouseTask(input: {
+  tenantId: string;
+  id: number;
+}) {
+  await db.run(
+    `DELETE FROM house_maintenance_tasks
+     WHERE tenant_id = ? AND id = ?`,
+    [input.tenantId, input.id]
+  );
+}
+
+export async function getHouseOverview(tenantId: string, year?: string) {
+  const reportYear = yearParam(year);
+  const assets = await db.all<{
+    id: number;
+    asset_name: string;
+    asset_type: string;
+    category: string;
+    location: string | null;
+    install_date: string | null;
+    purchase_date: string | null;
+    warranty_expires: string | null;
+    expected_lifespan_years: number | null;
+    condition_status: string;
+    replacement_priority: string;
+    vendor_name: string | null;
+    model_number: string | null;
+    serial_number: string | null;
+    replacement_cost: number;
+    notes: string | null;
+  }>(
+    `SELECT id, asset_name, asset_type, category, location, install_date, purchase_date, warranty_expires, expected_lifespan_years, condition_status, replacement_priority, vendor_name, model_number, serial_number, replacement_cost, notes
+     FROM house_assets
+     WHERE tenant_id = ?
+     ORDER BY CASE replacement_priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+              CASE condition_status WHEN 'replace_soon' THEN 0 WHEN 'repair_now' THEN 1 WHEN 'watch' THEN 2 ELSE 3 END,
+              asset_type ASC, category ASC, asset_name ASC`,
+    [tenantId]
+  );
+
+  const tasks = await db.all<{
+    id: number;
+    asset_id: number | null;
+    asset_name: string | null;
+    title: string;
+    task_type: string;
+    cadence_months: number | null;
+    last_completed_on: string | null;
+    next_due_on: string;
+    status: string;
+    estimated_cost: number;
+    vendor_name: string | null;
+    notes: string | null;
+  }>(
+    `SELECT t.id, t.asset_id, a.asset_name, t.title, t.task_type, t.cadence_months, t.last_completed_on, t.next_due_on, t.status, t.estimated_cost, t.vendor_name, t.notes
+     FROM house_maintenance_tasks t
+     LEFT JOIN house_assets a ON a.id = t.asset_id
+     WHERE t.tenant_id = ?
+     ORDER BY CASE t.status WHEN 'planned' THEN 0 WHEN 'scheduled' THEN 1 WHEN 'done' THEN 2 ELSE 3 END,
+              t.next_due_on ASC, t.id DESC`,
+    [tenantId]
+  );
+
+  const dueThisYear = tasks.filter((task) => task.next_due_on?.slice(0, 4) === reportYear).length;
+  const warrantiesExpiring = assets.filter((asset) => asset.warranty_expires?.slice(0, 4) === reportYear).length;
+  const replacementExposure = assets
+    .filter((asset) => asset.replacement_priority === 'high' || asset.condition_status === 'replace_soon')
+    .reduce((sum, asset) => sum + (asset.replacement_cost ?? 0), 0);
+  const monthKeys = Array.from({ length: 12 }, (_, index) => `${reportYear}-${String(index + 1).padStart(2, '0')}`);
+  const monthlyDue = monthKeys.map((month) => ({
+    month,
+    count: tasks.filter((task) => task.next_due_on?.slice(0, 7) === month).length
+  }));
+
+  return {
+    reportYear,
+    assets,
+    tasks,
+    monthlyDue,
+    stats: {
+      totalAssets: assets.length,
+      systemsTracked: assets.filter((asset) => asset.asset_type === 'system').length,
+      appliancesTracked: assets.filter((asset) => asset.asset_type === 'appliance').length,
+      highPriorityAssets: assets.filter((asset) => asset.replacement_priority === 'high').length,
+      replaceSoonAssets: assets.filter((asset) => asset.condition_status === 'replace_soon').length,
+      dueThisYear,
+      warrantiesExpiring,
+      replacementExposure
     }
   };
 }

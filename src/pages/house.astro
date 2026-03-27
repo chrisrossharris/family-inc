@@ -1,0 +1,469 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { getHouseOverview } from '@/lib/services/pillars';
+import { listHouseAssetDocuments } from '@/lib/services/integrations';
+import { formatCurrency } from '@/lib/utils/format';
+import { normalizeReportYear } from '@/lib/utils/year';
+
+const tenantId = Astro.locals.tenantId;
+const selectedYear = normalizeReportYear(Astro.url.searchParams.get('year'));
+const saved = Astro.url.searchParams.get('saved');
+const error = Astro.url.searchParams.get('error');
+const overview = await getHouseOverview(tenantId, selectedYear);
+const documents = await listHouseAssetDocuments(tenantId);
+const watchAssets = overview.assets.filter((asset) => asset.condition_status !== 'good' || asset.replacement_priority === 'high').slice(0, 8);
+const openTasks = overview.tasks.filter((task) => task.status === 'planned' || task.status === 'scheduled');
+const conditionLabel: Record<string, string> = {
+  good: 'Good',
+  watch: 'Watch',
+  repair_now: 'Repair Now',
+  replace_soon: 'Replace Soon'
+};
+const priorityLabel: Record<string, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High'
+};
+const assetTypeLabel: Record<string, string> = {
+  system: 'System',
+  appliance: 'Appliance',
+  fixture: 'Fixture',
+  exterior: 'Exterior',
+  safety: 'Safety',
+  other: 'Other'
+};
+---
+
+<BaseLayout title="House" subtitle="Asset ledger and maintenance calendar for the systems that keep the family running.">
+  {saved && <div class="mb-4 border border-accent/40 bg-accent/10 p-3 text-sm">Saved: {saved}</div>}
+  {error && <div class="mb-4 border border-red-300 bg-red-50 p-3 text-sm text-red-900">Could not save that house record. For files, make sure an asset is selected and the file is under 8MB.</div>}
+
+  <section class="panel mb-4">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <p class="panel-title">Whole House Operations</p>
+        <p class="mt-1 text-sm text-muted">Track systems, appliances, warranties, and maintenance before they turn into emergency spending.</p>
+      </div>
+      <div class="flex flex-wrap gap-2 text-[10px] uppercase tracking-report">
+        <a class="border border-grid px-2 py-1 hover:bg-ink hover:text-paper" href="#asset-register">Asset Register</a>
+        <a class="border border-grid px-2 py-1 hover:bg-ink hover:text-paper" href="#maintenance-queue">Maintenance Queue</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="kpi-grid md:grid-cols-4 2xl:grid-cols-7">
+    <article class="kpi-card"><p class="panel-title">Assets Tracked</p><p class="kpi-value">{overview.stats.totalAssets}</p></article>
+    <article class="kpi-card"><p class="panel-title">Systems</p><p class="kpi-value">{overview.stats.systemsTracked}</p></article>
+    <article class="kpi-card"><p class="panel-title">Appliances</p><p class="kpi-value">{overview.stats.appliancesTracked}</p></article>
+    <article class="kpi-card"><p class="panel-title">High Priority</p><p class="kpi-value">{overview.stats.highPriorityAssets}</p></article>
+    <article class="kpi-card"><p class="panel-title">Replace Soon</p><p class="kpi-value">{overview.stats.replaceSoonAssets}</p></article>
+    <article class="kpi-card"><p class="panel-title">Tasks Due {selectedYear}</p><p class="kpi-value">{overview.stats.dueThisYear}</p></article>
+    <article class="kpi-card"><p class="panel-title">Replacement Exposure</p><p class="kpi-value">{formatCurrency(overview.stats.replacementExposure)}</p></article>
+  </section>
+
+  <section class="mt-4 grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
+    <article class="panel">
+      <h2 class="panel-title">Maintenance Calendar ({selectedYear})</h2>
+      <p class="mt-2 text-xs text-muted">Use this to spot seasonal stacking: HVAC, gutters, filters, roof checks, and warranty renewals.</p>
+      <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {overview.monthlyDue.map((month) => (
+          <div class="border border-grid bg-white/40 p-3">
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-[10px] uppercase tracking-report text-muted">{month.month}</p>
+              <p class="mono-num text-sm">{month.count}</p>
+            </div>
+            <div class="mt-2 h-1.5 border border-grid bg-paper">
+              <div class="h-full bg-ink" style={`width:${Math.min(100, month.count * 20)}%`}></div>
+            </div>
+            <div class="mt-3 space-y-2 text-xs">
+              {overview.tasks
+                .filter((task) => task.next_due_on?.slice(0, 7) === month.month)
+                .slice(0, 3)
+                .map((task) => (
+                  <div class="border border-grid p-2">
+                    <p class="font-medium text-ink">{task.title}</p>
+                    <p class="text-muted">{task.asset_name ?? 'General house'} {task.next_due_on ? `· ${task.next_due_on}` : ''}</p>
+                  </div>
+                ))}
+              {month.count === 0 && <p class="text-muted">No due tasks.</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </article>
+
+    <article class="panel">
+      <h2 class="panel-title">Watchlist</h2>
+      <p class="mt-2 text-xs text-muted">Items that need inspection, repair planning, or replacement budgeting.</p>
+      <div class="mt-3 space-y-2">
+        {watchAssets.length === 0 && <div class="border border-grid p-3 text-xs text-muted">No active watch items. Add major systems first: roof, HVAC, water heater, electrical, plumbing.</div>}
+        {watchAssets.map((asset) => (
+          <div class="border border-grid p-2 text-xs">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="font-medium text-ink">{asset.asset_name}</p>
+                <p class="text-muted">{asset.category} {asset.location ? `· ${asset.location}` : ''}</p>
+              </div>
+              <div class="text-right">
+                <span class:list={['inline-block border px-2 py-0.5 text-[10px] uppercase tracking-report', asset.condition_status === 'repair_now' || asset.condition_status === 'replace_soon' ? 'border-red-300 bg-red-50 text-red-900' : 'border-amber-300 bg-amber-50 text-amber-900']}>
+                  {conditionLabel[asset.condition_status] ?? asset.condition_status}
+                </span>
+              </div>
+            </div>
+            <div class="mt-2 flex items-center justify-between gap-3 text-[10px] uppercase tracking-report text-muted">
+              <span>Priority: {priorityLabel[asset.replacement_priority] ?? asset.replacement_priority}</span>
+              <span>{formatCurrency(asset.replacement_cost ?? 0)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </article>
+  </section>
+
+  <section class="mt-4 grid gap-4 lg:grid-cols-2">
+    <article class="panel">
+      <h2 class="panel-title">Add House Asset</h2>
+      <details class="form-card mt-3" open={overview.assets.length === 0}>
+        <summary>Add Asset</summary>
+        <form method="post" action="/api/pillars/house-asset" class="mt-3 grid gap-2 md:grid-cols-2">
+          <input type="hidden" name="year" value={selectedYear} />
+          <input type="text" name="asset_name" required placeholder="Water heater, Roof, Dryer, Main panel" class="md:col-span-2" />
+          <select name="asset_type">
+            <option value="system">System</option>
+            <option value="appliance">Appliance</option>
+            <option value="fixture">Fixture</option>
+            <option value="exterior">Exterior</option>
+            <option value="safety">Safety</option>
+            <option value="other">Other</option>
+          </select>
+          <input type="text" name="category" required placeholder="HVAC, Plumbing, Kitchen, Roof" />
+          <input type="text" name="location" placeholder="Basement, attic, kitchen" />
+          <input type="text" name="vendor_name" placeholder="Installer / vendor" />
+          <input type="date" name="install_date" />
+          <input type="date" name="warranty_expires" />
+          <input type="number" name="expected_lifespan_years" min="0" placeholder="Lifespan (years)" />
+          <input type="number" name="replacement_cost" min="0" step="0.01" placeholder="Replacement cost" />
+          <select name="condition_status">
+            <option value="good">Good</option>
+            <option value="watch">Watch</option>
+            <option value="repair_now">Repair now</option>
+            <option value="replace_soon">Replace soon</option>
+          </select>
+          <select name="replacement_priority">
+            <option value="low">Low priority</option>
+            <option value="medium">Medium priority</option>
+            <option value="high">High priority</option>
+          </select>
+          <input type="text" name="model_number" placeholder="Model number" />
+          <input type="text" name="serial_number" placeholder="Serial number" />
+          <textarea name="notes" rows="2" class="md:col-span-2" placeholder="Notes, warranty details, maintenance context"></textarea>
+          <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Asset</button>
+        </form>
+      </details>
+    </article>
+
+    <article class="panel">
+      <h2 class="panel-title">Add Maintenance Task</h2>
+      <details class="form-card mt-3" open={overview.tasks.length === 0}>
+        <summary>Add Task</summary>
+        <form method="post" action="/api/pillars/house-task" class="mt-3 grid gap-2 md:grid-cols-2">
+          <input type="hidden" name="year" value={selectedYear} />
+          <input type="text" name="title" required placeholder="Spring HVAC service, Replace filter, Inspect roof flashing" class="md:col-span-2" />
+          <select name="asset_id">
+            <option value="">General house task</option>
+            {overview.assets.map((asset) => <option value={asset.id}>{asset.asset_name}</option>)}
+          </select>
+          <select name="task_type">
+            <option value="inspect">Inspect</option>
+            <option value="service">Service</option>
+            <option value="clean">Clean</option>
+            <option value="repair">Repair</option>
+            <option value="replace">Replace</option>
+            <option value="warranty">Warranty</option>
+          </select>
+          <input type="date" name="next_due_on" />
+          <input type="date" name="last_completed_on" />
+          <input type="number" name="cadence_months" min="0" placeholder="Repeat every X months" />
+          <input type="number" name="estimated_cost" min="0" step="0.01" placeholder="Estimated cost" />
+          <select name="status">
+            <option value="planned">Planned</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="done">Done</option>
+            <option value="skipped">Skipped</option>
+          </select>
+          <input type="text" name="vendor_name" placeholder="Contractor / servicer" />
+          <textarea name="notes" rows="2" class="md:col-span-2" placeholder="Scope, prep notes, parts needed"></textarea>
+          <button type="submit" class="md:col-span-2 border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Save Task</button>
+        </form>
+      </details>
+    </article>
+  </section>
+
+  <section class="mt-4 grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+    <article class="panel">
+      <h2 class="panel-title">Documents</h2>
+      <p class="mt-2 text-xs text-muted">Upload manuals, receipts, warranties, quotes, and service invoices directly against a house asset.</p>
+      <details class="form-card mt-3" open={documents.length === 0}>
+        <summary>Upload Document</summary>
+        <form method="post" action="/api/pillars/house-document" enctype="multipart/form-data" class="mt-3 grid gap-2">
+          <input type="hidden" name="year" value={selectedYear} />
+          <select name="asset_id" required>
+            <option value="">Select asset</option>
+            {overview.assets.map((asset) => <option value={asset.id}>{asset.asset_name}</option>)}
+          </select>
+          <input type="file" name="file" required />
+          <textarea name="notes" rows="2" placeholder="Warranty note, invoice context, serial lookup, etc"></textarea>
+          <button type="submit" class="border border-ink bg-ink px-3 py-2 text-xs uppercase tracking-report text-paper">Upload Document</button>
+        </form>
+      </details>
+    </article>
+
+    <article class="panel">
+      <h2 class="panel-title">Recent Documents</h2>
+      <div class="overflow-x-auto">
+        <table class="table-report mt-3 w-full min-w-[760px]">
+          <thead><tr><th>Asset</th><th>File</th><th class="text-right">Size</th><th>Uploaded</th><th>Open</th><th>Delete</th></tr></thead>
+          <tbody>
+            {documents.length === 0 && <tr><td colspan="6" class="text-xs text-muted">No house documents uploaded yet.</td></tr>}
+            {documents.map((doc) => (
+              <tr>
+                <td>{doc.asset_name ?? 'Unknown asset'}</td>
+                <td>
+                  <div>{doc.file_name}</div>
+                  {doc.notes && <div class="mt-1 text-[10px] text-muted">{doc.notes}</div>}
+                </td>
+                <td class="mono-num">{(doc.file_size / 1024).toFixed(0)} KB</td>
+                <td>{doc.uploaded_at}</td>
+                <td><a class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper" href={`/api/pillars/house-document-download?id=${doc.id}`}>Open</a></td>
+                <td>
+                  <form method="post" action="/api/pillars/house-document">
+                    <input type="hidden" name="year" value={selectedYear} />
+                    <input type="hidden" name="id" value={doc.id} />
+                    <input type="hidden" name="mode" value="delete" />
+                    <button type="submit" class="border border-red-500 px-2 py-1 text-[10px] uppercase tracking-report text-red-700 hover:bg-red-600 hover:text-paper">Delete</button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  </section>
+
+  <section class="mt-4 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+    <article class="panel" id="asset-register">
+      <h2 class="panel-title">Asset Register</h2>
+      <p class="mt-2 text-xs text-muted">Track install dates, replacement risk, and warranty context for expensive home assets.</p>
+      <div class="overflow-x-auto">
+        <table class="table-report mt-4 hidden min-w-[1180px] w-full md:table">
+          <thead><tr><th>Asset</th><th>Type</th><th>Location</th><th>Condition</th><th>Priority</th><th>Warranty</th><th class="text-right">Replace Cost</th><th>Edit</th><th>Delete</th></tr></thead>
+          <tbody>
+            {overview.assets.length === 0 && <tr><td colspan="9" class="text-xs text-muted">No assets tracked yet.</td></tr>}
+            {overview.assets.map((asset) => (
+              <tr>
+                <td>
+                  <input form={`house-asset-${asset.id}`} type="text" name="asset_name" required value={asset.asset_name} class="text-xs" />
+                  <input form={`house-asset-${asset.id}`} type="hidden" name="category" value={asset.category} />
+                  <div class="mt-1 text-[10px] uppercase tracking-report text-muted">{asset.category}</div>
+                </td>
+                <td>
+                  <select form={`house-asset-${asset.id}`} name="asset_type" class="text-xs">
+                    {Object.entries(assetTypeLabel).map(([value, label]) => <option value={value} selected={asset.asset_type === value}>{label.toLowerCase()}</option>)}
+                  </select>
+                </td>
+                <td><input form={`house-asset-${asset.id}`} type="text" name="location" value={asset.location ?? ''} class="text-xs" /></td>
+                <td>
+                  <select form={`house-asset-${asset.id}`} name="condition_status" class="text-xs">
+                    {Object.entries(conditionLabel).map(([value, label]) => <option value={value} selected={asset.condition_status === value}>{label.toLowerCase()}</option>)}
+                  </select>
+                </td>
+                <td>
+                  <select form={`house-asset-${asset.id}`} name="replacement_priority" class="text-xs">
+                    {Object.entries(priorityLabel).map(([value, label]) => <option value={value} selected={asset.replacement_priority === value}>{label.toLowerCase()}</option>)}
+                  </select>
+                </td>
+                <td><input form={`house-asset-${asset.id}`} type="date" name="warranty_expires" value={asset.warranty_expires ?? ''} class="text-xs" /></td>
+                <td class="mono-num"><input form={`house-asset-${asset.id}`} type="number" name="replacement_cost" min="0" step="0.01" value={asset.replacement_cost ?? 0} class="w-28 text-right text-xs" /></td>
+                <td><button form={`house-asset-${asset.id}`} type="submit" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Save</button></td>
+                <td>
+                  <button form={`house-asset-delete-${asset.id}`} type="submit" class="border border-red-500 px-2 py-1 text-[10px] uppercase tracking-report text-red-700 hover:bg-red-600 hover:text-paper">Delete</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div class="mt-3 space-y-3 md:hidden">
+        {overview.assets.map((asset) => (
+          <form method="post" action="/api/pillars/house-asset" class="mobile-edit-card">
+            <input type="hidden" name="year" value={selectedYear} />
+            <input type="hidden" name="id" value={asset.id} />
+            <input type="hidden" name="category" value={asset.category} />
+            <input type="hidden" name="install_date" value={asset.install_date ?? ''} />
+            <input type="hidden" name="purchase_date" value={asset.purchase_date ?? ''} />
+            <input type="hidden" name="expected_lifespan_years" value={asset.expected_lifespan_years ?? ''} />
+            <input type="hidden" name="vendor_name" value={asset.vendor_name ?? ''} />
+            <input type="hidden" name="model_number" value={asset.model_number ?? ''} />
+            <input type="hidden" name="serial_number" value={asset.serial_number ?? ''} />
+            <input type="hidden" name="notes" value={asset.notes ?? ''} />
+            <label class="mobile-edit-label">Asset<input type="text" name="asset_name" required value={asset.asset_name} class="mt-1" /></label>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="mobile-edit-label">Type
+                <select name="asset_type" class="mt-1">
+                  {Object.entries(assetTypeLabel).map(([value, label]) => <option value={value} selected={asset.asset_type === value}>{label}</option>)}
+                </select>
+              </label>
+              <label class="mobile-edit-label">Location<input type="text" name="location" value={asset.location ?? ''} class="mt-1" /></label>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="mobile-edit-label">Condition
+                <select name="condition_status" class="mt-1">
+                  {Object.entries(conditionLabel).map(([value, label]) => <option value={value} selected={asset.condition_status === value}>{label}</option>)}
+                </select>
+              </label>
+              <label class="mobile-edit-label">Priority
+                <select name="replacement_priority" class="mt-1">
+                  {Object.entries(priorityLabel).map(([value, label]) => <option value={value} selected={asset.replacement_priority === value}>{label}</option>)}
+                </select>
+              </label>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="mobile-edit-label">Warranty<input type="date" name="warranty_expires" value={asset.warranty_expires ?? ''} class="mt-1" /></label>
+              <label class="mobile-edit-label">Replacement Cost<input type="number" name="replacement_cost" min="0" step="0.01" value={asset.replacement_cost ?? 0} class="mt-1 text-right" /></label>
+            </div>
+            <div class="mobile-edit-actions flex items-center justify-between gap-2">
+              <button formaction="/api/pillars/house-asset" name="mode" value="delete" type="submit" class="border border-red-500 px-3 py-1.5 text-[10px] uppercase tracking-report text-red-700 hover:bg-red-600 hover:text-paper">Delete</button>
+              <button type="submit" class="border border-grid px-3 py-1.5 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Save</button>
+            </div>
+          </form>
+        ))}
+      </div>
+      {overview.assets.map((asset) => (
+        <form id={`house-asset-${asset.id}`} method="post" action="/api/pillars/house-asset" class="hidden">
+          <input type="hidden" name="year" value={selectedYear} />
+          <input type="hidden" name="id" value={asset.id} />
+          <input type="hidden" name="category" value={asset.category} />
+          <input type="hidden" name="install_date" value={asset.install_date ?? ''} />
+          <input type="hidden" name="purchase_date" value={asset.purchase_date ?? ''} />
+          <input type="hidden" name="expected_lifespan_years" value={asset.expected_lifespan_years ?? ''} />
+          <input type="hidden" name="vendor_name" value={asset.vendor_name ?? ''} />
+          <input type="hidden" name="model_number" value={asset.model_number ?? ''} />
+          <input type="hidden" name="serial_number" value={asset.serial_number ?? ''} />
+          <input type="hidden" name="notes" value={asset.notes ?? ''} />
+        </form>
+        <form id={`house-asset-delete-${asset.id}`} method="post" action="/api/pillars/house-asset" class="hidden">
+          <input type="hidden" name="year" value={selectedYear} />
+          <input type="hidden" name="id" value={asset.id} />
+          <input type="hidden" name="mode" value="delete" />
+        </form>
+      ))}
+    </article>
+
+    <article class="panel" id="maintenance-queue">
+      <h2 class="panel-title">Maintenance Queue</h2>
+      <p class="mt-2 text-xs text-muted">Recurring work that protects time, money, and house uptime.</p>
+      <div class="mt-3 space-y-2">
+        {openTasks.length === 0 && <div class="border border-grid p-3 text-xs text-muted">No open maintenance tasks yet.</div>}
+        {openTasks.slice(0, 10).map((task) => (
+          <div class="border border-grid p-2">
+            <div class="flex items-start justify-between gap-3 text-xs">
+              <div>
+                <p class="font-medium text-ink">{task.title}</p>
+                <p class="text-muted">{task.asset_name ?? 'General house'} {task.vendor_name ? `· ${task.vendor_name}` : ''}</p>
+              </div>
+              <div class="text-right">
+                <p class="mono-num">{task.estimated_cost ? formatCurrency(task.estimated_cost) : 'n/a'}</p>
+                <p class="text-[10px] uppercase tracking-report text-muted">{task.next_due_on ?? 'No due date'}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="table-report mt-4 hidden min-w-[880px] w-full md:table">
+          <thead><tr><th>Task</th><th>Asset</th><th>Due</th><th>Status</th><th class="text-right">Cost</th><th>Edit</th><th>Delete</th></tr></thead>
+          <tbody>
+            {overview.tasks.length === 0 && <tr><td colspan="7" class="text-xs text-muted">No maintenance tasks tracked yet.</td></tr>}
+            {overview.tasks.map((task) => (
+              <tr>
+                <td><input form={`house-task-${task.id}`} type="text" name="title" required value={task.title} class="text-xs" /></td>
+                <td>
+                  <select form={`house-task-${task.id}`} name="asset_id" class="text-xs">
+                    <option value="">General house</option>
+                    {overview.assets.map((asset) => <option value={asset.id} selected={task.asset_id === asset.id}>{asset.asset_name}</option>)}
+                  </select>
+                </td>
+                <td><input form={`house-task-${task.id}`} type="date" name="next_due_on" value={task.next_due_on ?? ''} class="text-xs" /></td>
+                <td>
+                  <select form={`house-task-${task.id}`} name="status" class="text-xs">
+                    <option value="planned" selected={task.status === 'planned'}>planned</option>
+                    <option value="scheduled" selected={task.status === 'scheduled'}>scheduled</option>
+                    <option value="done" selected={task.status === 'done'}>done</option>
+                    <option value="skipped" selected={task.status === 'skipped'}>skipped</option>
+                  </select>
+                </td>
+                <td class="mono-num"><input form={`house-task-${task.id}`} type="number" name="estimated_cost" min="0" step="0.01" value={task.estimated_cost ?? 0} class="w-24 text-right text-xs" /></td>
+                <td><button form={`house-task-${task.id}`} type="submit" class="border border-grid px-2 py-1 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Save</button></td>
+                <td><button form={`house-task-delete-${task.id}`} type="submit" class="border border-red-500 px-2 py-1 text-[10px] uppercase tracking-report text-red-700 hover:bg-red-600 hover:text-paper">Delete</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div class="mt-3 space-y-3 md:hidden">
+        {overview.tasks.map((task) => (
+          <form method="post" action="/api/pillars/house-task" class="mobile-edit-card">
+            <input type="hidden" name="year" value={selectedYear} />
+            <input type="hidden" name="id" value={task.id} />
+            <input type="hidden" name="task_type" value={task.task_type} />
+            <input type="hidden" name="cadence_months" value={task.cadence_months ?? ''} />
+            <input type="hidden" name="last_completed_on" value={task.last_completed_on ?? ''} />
+            <input type="hidden" name="vendor_name" value={task.vendor_name ?? ''} />
+            <input type="hidden" name="notes" value={task.notes ?? ''} />
+            <label class="mobile-edit-label">Task<input type="text" name="title" required value={task.title} class="mt-1" /></label>
+            <label class="mobile-edit-label">Asset
+              <select name="asset_id" class="mt-1">
+                <option value="">General house</option>
+                {overview.assets.map((asset) => <option value={asset.id} selected={task.asset_id === asset.id}>{asset.asset_name}</option>)}
+              </select>
+            </label>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="mobile-edit-label">Due<input type="date" name="next_due_on" value={task.next_due_on ?? ''} class="mt-1" /></label>
+              <label class="mobile-edit-label">Cost<input type="number" name="estimated_cost" min="0" step="0.01" value={task.estimated_cost ?? 0} class="mt-1 text-right" /></label>
+            </div>
+            <label class="mobile-edit-label">Status
+              <select name="status" class="mt-1">
+                <option value="planned" selected={task.status === 'planned'}>planned</option>
+                <option value="scheduled" selected={task.status === 'scheduled'}>scheduled</option>
+                <option value="done" selected={task.status === 'done'}>done</option>
+                <option value="skipped" selected={task.status === 'skipped'}>skipped</option>
+              </select>
+            </label>
+            <div class="mobile-edit-actions flex items-center justify-between gap-2">
+              <button formaction="/api/pillars/house-task" name="mode" value="delete" type="submit" class="border border-red-500 px-3 py-1.5 text-[10px] uppercase tracking-report text-red-700 hover:bg-red-600 hover:text-paper">Delete</button>
+              <button type="submit" class="border border-grid px-3 py-1.5 text-[10px] uppercase tracking-report hover:bg-ink hover:text-paper">Save</button>
+            </div>
+          </form>
+        ))}
+      </div>
+      {overview.tasks.map((task) => (
+        <form id={`house-task-${task.id}`} method="post" action="/api/pillars/house-task" class="hidden">
+          <input type="hidden" name="year" value={selectedYear} />
+          <input type="hidden" name="id" value={task.id} />
+          <input type="hidden" name="task_type" value={task.task_type} />
+          <input type="hidden" name="cadence_months" value={task.cadence_months ?? ''} />
+          <input type="hidden" name="last_completed_on" value={task.last_completed_on ?? ''} />
+          <input type="hidden" name="vendor_name" value={task.vendor_name ?? ''} />
+          <input type="hidden" name="notes" value={task.notes ?? ''} />
+        </form>
+        <form id={`house-task-delete-${task.id}`} method="post" action="/api/pillars/house-task" class="hidden">
+          <input type="hidden" name="year" value={selectedYear} />
+          <input type="hidden" name="id" value={task.id} />
+          <input type="hidden" name="mode" value="delete" />
+        </form>
+      ))}
+    </article>
+  </section>
+</BaseLayout>

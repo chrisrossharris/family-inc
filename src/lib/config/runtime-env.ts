@@ -96,8 +96,20 @@ export function evaluateRuntimeEnv(envInput: EnvMap = getRuntimeEnv()): RuntimeE
   else if (!dbUrlSchema.safeParse(databaseUrl).success) invalidCore.push('DATABASE_URL');
 
   const stripeSecret = readFirst(env, ['STRIPE_SECRET_KEY', 'STRIPE_SECRET', 'NETLIFY_STRIPE_SECRET_KEY']);
-  const stripePlus = readFirst(env, ['STRIPE_PRICE_FAMILY_PLUS', 'STRIPE_PRICE_ID_FAMILY_PLUS', 'STRIPE_FAMILY_PLUS_PRICE_ID']);
-  const stripePro = readFirst(env, ['STRIPE_PRICE_FAMILY_PRO', 'STRIPE_PRICE_ID_FAMILY_PRO', 'STRIPE_FAMILY_PRO_PRICE_ID']);
+  const stripePlus = readFirst(env, [
+    'STRIPE_PRICE_FAMILY_PLUS',
+    'STRIPE_PRICE_ID_FAMILY_PLUS',
+    'STRIPE_FAMILY_PLUS_PRICE_ID',
+    'PLUS_PRICE',
+    'STRIPE_PLUS_PRICE'
+  ]);
+  const stripePro = readFirst(env, [
+    'STRIPE_PRICE_FAMILY_PRO',
+    'STRIPE_PRICE_ID_FAMILY_PRO',
+    'STRIPE_FAMILY_PRO_PRICE_ID',
+    'PRO_PRICE',
+    'STRIPE_PRO_PRICE'
+  ]);
   const billingFlag = readFirst(env, ['REQUIRE_STRIPE_BILLING']);
   const billingRequired = billingFlag === '1' || !!stripeSecret || !!stripePlus || !!stripePro;
 

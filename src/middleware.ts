@@ -14,7 +14,11 @@ if (normalizedClerkPublishableKey) {
 
 const startupEnv = evaluateRuntimeEnv();
 if (startupEnv.mode === 'production') {
-  assertRuntimeEnv();
+  const envForStartup = {
+    ...process.env,
+    REQUIRE_STRIPE_BILLING: ''
+  };
+  assertRuntimeEnv(envForStartup);
 } else if (!startupEnv.ok) {
   const details = [
     startupEnv.missingCore.length ? `missing core: ${startupEnv.missingCore.join(', ')}` : '',

@@ -4,6 +4,7 @@ import { createClient } from '@libsql/client';
 import { Pool } from 'pg';
 import { schemaSql } from './schema';
 import { postgresSchemaSql } from './schema-postgres';
+import { resetPostgresIdentitySequences } from './postgres-sequences';
 
 function pickFirstEnv(keys: string[]): { key: string; value: string } | null {
   for (const key of keys) {
@@ -76,6 +77,8 @@ async function runPostgresMigrations(url: string, migrationFiles: string[]) {
         throw error;
       }
     }
+
+    await resetPostgresIdentitySequences(client);
   } finally {
     client.release();
     await pool.end();

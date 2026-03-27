@@ -30,9 +30,10 @@ const isEnergy = Astro.url.pathname.startsWith('/energy');
 const isAnnualReport = Astro.url.pathname.startsWith('/annual-report');
 const isGoalsProjects = Astro.url.pathname.startsWith('/goals-projects');
 const isTrips = Astro.url.pathname.startsWith('/trips');
+const isHouse = Astro.url.pathname.startsWith('/house');
 const isHomeGroceries = Astro.url.pathname.startsWith('/home-groceries');
 const isMilestones = Astro.url.pathname.startsWith('/milestones');
-const isFinance = !isToday && !isPricing && !isHealth && !isChildren && !isEnergy && !isAnnualReport && !isGoalsProjects && !isTrips && !isHomeGroceries && !isMilestones;
+const isFinance = !isToday && !isPricing && !isHealth && !isChildren && !isEnergy && !isAnnualReport && !isGoalsProjects && !isTrips && !isHouse && !isHomeGroceries && !isMilestones;
 const isFinanceOverview = path === '/';
 const isFinanceEntityRoute = path.startsWith('/entity/');
 const activeFinanceEntity = isFinanceEntityRoute ? decodeURIComponent(path.slice('/entity/'.length)) : null;
@@ -148,6 +149,7 @@ function withYear(path: string): string {
             <a class:list={['border px-3 py-1 text-xs uppercase tracking-report', isEnergy ? 'border-ink bg-ink text-paper' : 'border-grid hover:bg-ink hover:text-paper']} href={withYear('/energy')}>Energy</a>
             <a class:list={['border px-3 py-1 text-xs uppercase tracking-report', isGoalsProjects ? 'border-ink bg-ink text-paper' : 'border-grid hover:bg-ink hover:text-paper']} href={withYear('/goals-projects')}>Goals & Projects</a>
             <a class:list={['border px-3 py-1 text-xs uppercase tracking-report', isTrips ? 'border-ink bg-ink text-paper' : 'border-grid hover:bg-ink hover:text-paper']} href={withYear('/trips')}>Trips</a>
+            <a class:list={['border px-3 py-1 text-xs uppercase tracking-report', isHouse ? 'border-ink bg-ink text-paper' : 'border-grid hover:bg-ink hover:text-paper']} href={withYear('/house')}>House</a>
             <a class:list={['border px-3 py-1 text-xs uppercase tracking-report', isHomeGroceries ? 'border-ink bg-ink text-paper' : 'border-grid hover:bg-ink hover:text-paper']} href={withYear('/home-groceries')}>Home & Groceries</a>
             <a class:list={['border px-3 py-1 text-xs uppercase tracking-report', isMilestones ? 'border-ink bg-ink text-paper' : 'border-grid hover:bg-ink hover:text-paper']} href={withYear('/milestones')}>Milestones</a>
           </nav>
@@ -205,6 +207,14 @@ function withYear(path: string): string {
             <p class="mb-2 text-[10px] uppercase tracking-report text-muted">Trips Workspace</p>
             <nav class="flex flex-wrap gap-2">
               <a class:list={subNavClasses(true)} href={withYear('/trips')}>Trips Dashboard</a>
+            </nav>
+          </div>
+        )}
+        {isHouse && (
+          <div class="mx-auto max-w-7xl border-t border-grid px-4 pb-4 pt-3 md:px-8">
+            <p class="mb-2 text-[10px] uppercase tracking-report text-muted">House Workspace</p>
+            <nav class="flex flex-wrap gap-2">
+              <a class:list={subNavClasses(true)} href={withYear('/house')}>House Ledger</a>
             </nav>
           </div>
         )}

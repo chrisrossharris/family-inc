@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { createClient } from '@libsql/client';
 import { Pool } from 'pg';
+import { resetPostgresIdentitySequences } from './postgres-sequences';
 
 type SqliteValue = string | number | null;
 
@@ -21,6 +22,8 @@ const TABLE_ORDER = [
   'health_allergies',
   'health_medications',
   'health_appointments',
+  'health_calendar_feeds',
+  'health_calendar_event_links',
   'children_profiles',
   'children_checkins',
   'children_goals',
@@ -35,6 +38,9 @@ const TABLE_ORDER = [
   'home_grocery_items',
   'home_grocery_receipts',
   'home_grocery_receipt_items',
+  'house_assets',
+  'house_maintenance_tasks',
+  'house_asset_documents',
   'energy_profiles',
   'energy_bills',
   'energy_actions',
@@ -187,6 +193,7 @@ async function main() {
       totalRead += result.read;
       totalInserted += result.inserted;
     }
+    await resetPostgresIdentitySequences(pool);
   } finally {
     sqlite.close();
     await pool.end();
@@ -199,4 +206,3 @@ main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
-

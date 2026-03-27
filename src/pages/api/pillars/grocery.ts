@@ -2,13 +2,13 @@ import type { APIRoute } from 'astro';
 import { z } from 'zod';
 import { resolveSession } from '@/lib/auth/session';
 import { normalizeReportYear } from '@/lib/utils/year';
-import { addGroceryItem, updateGroceryItem } from '@/lib/services/pillars';
+import { addGroceryItem, inferGroceryCategory, updateGroceryItem } from '@/lib/services/pillars';
 import { formOptionalFlag, formOptionalInt, formOptionalNumber, formTrimmedString } from '@/lib/validation/form';
 
 const schema = z.object({
   id: formOptionalInt({ positive: true }),
   item_name: formTrimmedString(),
-  category: formTrimmedString(),
+  category: z.string().optional(),
   quantity: formOptionalNumber(),
   unit: z.string().optional(),
   needed: formOptionalFlag(),
@@ -18,36 +18,38 @@ const schema = z.object({
 });
 
 export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => {
-  const parsed = schema.safeParse(Object.fromEntries((await request.formData()).entries()));
-  if (!parsed.success) return new Response(JSON.stringify({ error: parsed.error.flatten() }), { status: 400 });
+  const values = Object.fromEntries((await request.formData()).entries());
+  const parsed = schema.safeParse(values);
+  const fallbackYear = normalizeReportYear(typeof values.year === 'string' ? values.year : undefined);
+  if (!parsed.success) return redirect(`/home-groceries?year=${fallbackYear}&error=grocery_invalid`, 303);
 
   const session = resolveSession(locals, cookies);
   const year = normalizeReportYear(parsed.data.year);
-  if (parsed.data.id) {
-    await updateGroceryItem({
-      tenantId: session.tenantId,
-      id: parsed.data.id,
-      itemName: parsed.data.item_name,
-      category: parsed.data.category,
-      quantity: parsed.data.quantity,
-      unit: parsed.data.unit || null,
-      needed: parsed.data.needed ? 1 : 0,
-      lastPurchasedOn: parsed.data.last_purchased_on || null,
-      notes: parsed.data.notes || null
-    });
-    return redirect(`/home-groceries?year=${year}&saved=grocery_updated`, 303);
-  }
-
-  await addGroceryItem({
+  const normalizedCategory = parsed.data.category?.trim() || inferGroceryCategory(parsed.data.item_name);
+  const payload = {
     tenantId: session.tenantId,
     itemName: parsed.data.item_name,
-    category: parsed.data.category,
+    category: normalizedCategory,
     quantity: parsed.data.quantity,
     unit: parsed.data.unit || null,
-    needed: parsed.data.needed ? 1 : 0,
+    needed: (parsed.data.needed ? 1 : 0) as 0 | 1,
     lastPurchasedOn: parsed.data.last_purchased_on || null,
     notes: parsed.data.notes || null
-  });
+  };
+
+  try {
+    if (parsed.data.id) {
+      await updateGroceryItem({
+        ...payload,
+        id: parsed.data.id
+      });
+      return redirect(`/home-groceries?year=${year}&saved=grocery_updated`, 303);
+    }
+
+    await addGroceryItem(payload);
+  } catch {
+    return redirect(`/home-groceries?year=${year}&error=grocery_failed`, 303);
+  }
 
   return redirect(`/home-groceries?year=${year}&saved=grocery_created`, 303);
 };

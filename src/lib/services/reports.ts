@@ -29,7 +29,7 @@ async function getActiveEntityOptions(tenantId: string) {
 
 export async function getAvailableYears(tenantId: string) {
   const txYearExpr = sqlYearExpr('date');
-  const [txRows, billRows] = await Promise.all([
+  const [txRows, billRows, houseTaskRows] = await Promise.all([
     db.all<{ year: string }>(
       `SELECT DISTINCT ${txYearExpr} AS year
        FROM transactions
@@ -41,10 +41,16 @@ export async function getAvailableYears(tenantId: string) {
        FROM energy_bills
        WHERE tenant_id = ? AND bill_month IS NOT NULL`,
       [tenantId]
+    ),
+    db.all<{ year: string }>(
+      `SELECT DISTINCT ${sqlYearExpr('next_due_on')} AS year
+       FROM house_maintenance_tasks
+       WHERE tenant_id = ? AND next_due_on IS NOT NULL`,
+      [tenantId]
     )
   ]);
 
-  const years = [...txRows, ...billRows]
+  const years = [...txRows, ...billRows, ...houseTaskRows]
     .map((row) => row.year)
     .filter(Boolean)
     .sort((a, b) => b.localeCompare(a));

@@ -17,21 +17,28 @@ const schema = z.object({
 });
 
 export const POST: APIRoute = async ({ request, redirect, locals, cookies }) => {
-  const parsed = schema.safeParse(Object.fromEntries((await request.formData()).entries()));
-  if (!parsed.success) return new Response(JSON.stringify({ error: parsed.error.flatten() }), { status: 400 });
+  const values = Object.fromEntries((await request.formData()).entries());
+  const parsed = schema.safeParse(values);
+  const fallbackYear = normalizeReportYear(typeof values.year === 'string' ? values.year : undefined);
+  if (!parsed.success) return redirect(`/health?year=${fallbackYear}&error=symptom_invalid`, 303);
 
   const session = resolveSession(locals, cookies);
   const year = normalizeReportYear(parsed.data.year);
-  await addSymptomLog({
-    tenantId: session.tenantId,
-    memberId: parsed.data.member_id,
-    occurredOn: parsed.data.occurred_on,
-    symptom: parsed.data.symptom,
-    severity: parsed.data.severity,
-    durationHours: parsed.data.duration_hours,
-    trigger: parsed.data.trigger || null,
-    notes: parsed.data.notes || null
-  });
+
+  try {
+    await addSymptomLog({
+      tenantId: session.tenantId,
+      memberId: parsed.data.member_id,
+      occurredOn: parsed.data.occurred_on,
+      symptom: parsed.data.symptom,
+      severity: parsed.data.severity,
+      durationHours: parsed.data.duration_hours,
+      trigger: parsed.data.trigger || null,
+      notes: parsed.data.notes || null
+    });
+  } catch {
+    return redirect(`/health?year=${year}&error=symptom_failed`, 303);
+  }
 
   return redirect(`/health?year=${year}&saved=symptom`, 303);
 };

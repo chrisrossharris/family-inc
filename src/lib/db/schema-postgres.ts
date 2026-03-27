@@ -381,6 +381,81 @@ CREATE TABLE IF NOT EXISTS home_grocery_receipt_items (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS house_assets (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id),
+  asset_name TEXT NOT NULL,
+  asset_type TEXT NOT NULL CHECK (asset_type IN ('system','appliance','fixture','exterior','safety','other')),
+  category TEXT NOT NULL,
+  location TEXT,
+  install_date TEXT,
+  purchase_date TEXT,
+  warranty_expires TEXT,
+  expected_lifespan_years INTEGER,
+  condition_status TEXT NOT NULL DEFAULT 'good' CHECK (condition_status IN ('good','watch','repair_now','replace_soon')),
+  replacement_priority TEXT NOT NULL DEFAULT 'medium' CHECK (replacement_priority IN ('low','medium','high')),
+  vendor_name TEXT,
+  model_number TEXT,
+  serial_number TEXT,
+  replacement_cost DOUBLE PRECISION NOT NULL DEFAULT 0,
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS house_maintenance_tasks (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id),
+  asset_id BIGINT REFERENCES house_assets(id),
+  title TEXT NOT NULL,
+  task_type TEXT NOT NULL CHECK (task_type IN ('inspect','service','clean','repair','replace','warranty')),
+  cadence_months INTEGER,
+  last_completed_on TEXT,
+  next_due_on TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','scheduled','done','skipped')),
+  estimated_cost DOUBLE PRECISION NOT NULL DEFAULT 0,
+  vendor_name TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS house_asset_documents (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id),
+  asset_id BIGINT NOT NULL REFERENCES house_assets(id),
+  file_name TEXT NOT NULL,
+  mime_type TEXT,
+  file_size INTEGER NOT NULL DEFAULT 0,
+  blob_data BYTEA NOT NULL,
+  notes TEXT,
+  uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS health_calendar_feeds (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id),
+  feed_name TEXT NOT NULL,
+  ical_url TEXT NOT NULL,
+  default_member_id BIGINT NOT NULL REFERENCES family_members(id),
+  active INTEGER NOT NULL DEFAULT 1,
+  last_synced_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS health_calendar_event_links (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id),
+  feed_id BIGINT NOT NULL REFERENCES health_calendar_feeds(id),
+  event_uid TEXT NOT NULL,
+  appointment_id BIGINT NOT NULL REFERENCES health_appointments(id),
+  event_hash TEXT NOT NULL,
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(feed_id, event_uid)
+);
+
 CREATE TABLE IF NOT EXISTS energy_profiles (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   tenant_id TEXT NOT NULL UNIQUE REFERENCES tenants(id),
@@ -567,6 +642,13 @@ CREATE INDEX IF NOT EXISTS idx_family_trip_items_tenant ON family_trip_items(ten
 CREATE INDEX IF NOT EXISTS idx_home_grocery_items_tenant ON home_grocery_items(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_home_grocery_receipts_tenant_date ON home_grocery_receipts(tenant_id, purchased_on);
 CREATE INDEX IF NOT EXISTS idx_home_grocery_receipt_items_tenant_receipt ON home_grocery_receipt_items(tenant_id, receipt_id);
+CREATE INDEX IF NOT EXISTS idx_house_assets_tenant ON house_assets(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_house_assets_tenant_priority ON house_assets(tenant_id, replacement_priority, condition_status);
+CREATE INDEX IF NOT EXISTS idx_house_tasks_tenant ON house_maintenance_tasks(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_house_tasks_tenant_due ON house_maintenance_tasks(tenant_id, next_due_on, status);
+CREATE INDEX IF NOT EXISTS idx_house_documents_tenant ON house_asset_documents(tenant_id, asset_id);
+CREATE INDEX IF NOT EXISTS idx_health_calendar_feeds_tenant ON health_calendar_feeds(tenant_id, active);
+CREATE INDEX IF NOT EXISTS idx_health_calendar_links_tenant ON health_calendar_event_links(tenant_id, feed_id);
 CREATE INDEX IF NOT EXISTS idx_energy_profiles_tenant ON energy_profiles(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_energy_bills_tenant_month ON energy_bills(tenant_id, bill_month);
 CREATE INDEX IF NOT EXISTS idx_energy_actions_tenant_status ON energy_actions(tenant_id, status);

@@ -31,9 +31,31 @@ function yearParam(year?: string): string {
 export async function listFamilyMembers(tenantId: string, options?: { includeInactive?: boolean }) {
   const includeInactive = options?.includeInactive ?? false;
   if (includeInactive) {
-    return db.all<FamilyMember>('SELECT * FROM family_members WHERE tenant_id = ? ORDER BY is_active DESC, name ASC', [tenantId]);
+    return db.all<FamilyMember>("SELECT * FROM family_members WHERE tenant_id = ? AND relation <> 'calendar' ORDER BY is_active DESC, name ASC", [tenantId]);
   }
-  return db.all<FamilyMember>('SELECT * FROM family_members WHERE tenant_id = ? AND is_active = 1 ORDER BY name ASC', [tenantId]);
+  return db.all<FamilyMember>("SELECT * FROM family_members WHERE tenant_id = ? AND is_active = 1 AND relation <> 'calendar' ORDER BY name ASC", [tenantId]);
+}
+
+export async function ensureFamilyCalendarMember(tenantId: string) {
+  const existing = await db.get<{ id: number }>(
+    "SELECT id FROM family_members WHERE tenant_id = ? AND relation = 'calendar' ORDER BY id ASC LIMIT 1",
+    [tenantId]
+  );
+  if (existing?.id) return existing.id;
+
+  const created = await db.run(
+    `INSERT INTO family_members (tenant_id, name, relation, notes, is_active)
+     VALUES (?, 'Family Calendar', 'calendar', 'System member used for shared calendar imports', 0)
+     RETURNING id`,
+    [tenantId]
+  );
+  if (created.lastInsertRowid && created.lastInsertRowid > 0) return created.lastInsertRowid;
+
+  const inserted = await db.get<{ id: number }>(
+    "SELECT id FROM family_members WHERE tenant_id = ? AND relation = 'calendar' ORDER BY id DESC LIMIT 1",
+    [tenantId]
+  );
+  return inserted?.id ?? 0;
 }
 
 export async function createOrUpdateFamilyMember(input: {
@@ -102,6 +124,46 @@ export async function addSickDay(input: {
       input.schoolWorkMissed ?? 1,
       input.notes ?? null
     ]
+  );
+}
+
+export async function updateSickDay(input: {
+  tenantId: string;
+  id: number;
+  memberId: number;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  fever?: 0 | 1;
+  schoolWorkMissed?: 0 | 1;
+  notes?: string | null;
+}) {
+  await db.run(
+    `UPDATE health_sick_days
+     SET member_id = ?, start_date = ?, end_date = ?, reason = ?, fever = ?, school_work_missed = ?, notes = ?
+     WHERE tenant_id = ? AND id = ?`,
+    [
+      input.memberId,
+      input.startDate,
+      input.endDate,
+      input.reason,
+      input.fever ?? 0,
+      input.schoolWorkMissed ?? 1,
+      input.notes ?? null,
+      input.tenantId,
+      input.id
+    ]
+  );
+}
+
+export async function deleteSickDay(input: {
+  tenantId: string;
+  id: number;
+}) {
+  await db.run(
+    `DELETE FROM health_sick_days
+     WHERE tenant_id = ? AND id = ?`,
+    [input.tenantId, input.id]
   );
 }
 
@@ -178,6 +240,46 @@ export async function addAppointment(input: {
   );
 }
 
+export async function updateAppointment(input: {
+  tenantId: string;
+  id: number;
+  memberId: number;
+  appointmentDate: string;
+  provider: string;
+  appointmentType: string;
+  status?: 'scheduled' | 'completed' | 'cancelled';
+  followUpDate?: string | null;
+  notes?: string | null;
+}) {
+  await db.run(
+    `UPDATE health_appointments
+     SET member_id = ?, appointment_date = ?, provider = ?, appointment_type = ?, status = ?, follow_up_date = ?, notes = ?
+     WHERE tenant_id = ? AND id = ?`,
+    [
+      input.memberId,
+      input.appointmentDate,
+      input.provider,
+      input.appointmentType,
+      input.status ?? 'scheduled',
+      input.followUpDate ?? null,
+      input.notes ?? null,
+      input.tenantId,
+      input.id
+    ]
+  );
+}
+
+export async function deleteAppointment(input: {
+  tenantId: string;
+  id: number;
+}) {
+  await db.run(
+    `DELETE FROM health_appointments
+     WHERE tenant_id = ? AND id = ?`,
+    [input.tenantId, input.id]
+  );
+}
+
 export async function getHealthOverview(tenantId: string, year?: string) {
   const reportYear = yearParam(year);
   const yearExpr = sqlYearExpr('occurred_on');
@@ -233,13 +335,16 @@ export async function getHealthOverview(tenantId: string, year?: string) {
 
   const upcomingApptList = await db.all<{
     id: number;
+    member_id: number | null;
     member_name: string | null;
     appointment_date: string;
     provider: string;
     appointment_type: string;
     status: string;
+    follow_up_date: string | null;
+    notes: string | null;
   }>(
-    `SELECT a.id, m.name AS member_name, a.appointment_date, a.provider, a.appointment_type, a.status
+    `SELECT a.id, a.member_id, m.name AS member_name, a.appointment_date, a.provider, a.appointment_type, a.status, a.follow_up_date, a.notes
      FROM health_appointments a
      LEFT JOIN family_members m ON m.id = a.member_id
      WHERE a.tenant_id = ?
@@ -265,6 +370,33 @@ export async function getHealthOverview(tenantId: string, year?: string) {
     [tenantId]
   );
 
+  const sickDayList = await db.all<{
+    id: number;
+    member_id: number | null;
+    member_name: string | null;
+    start_date: string;
+    end_date: string;
+    reason: string;
+    fever: 0 | 1;
+    school_work_missed: 0 | 1;
+    notes: string | null;
+  }>(
+    `SELECT d.id, d.member_id, m.name AS member_name, d.start_date, d.end_date, d.reason, d.fever, d.school_work_missed, d.notes
+     FROM health_sick_days d
+     LEFT JOIN family_members m ON m.id = d.member_id
+     WHERE d.tenant_id = ? AND ${sqlYearExpr('d.start_date')} = ?
+     ORDER BY d.start_date DESC, d.id DESC
+     LIMIT 50`,
+    [tenantId, reportYear]
+  );
+
+  const monthKeys = Array.from({ length: 12 }, (_, index) => `${reportYear}-${String(index + 1).padStart(2, '0')}`);
+  const careCalendar = monthKeys.map((month) => ({
+    month,
+    appointments: upcomingApptList.filter((appointment) => appointment.appointment_date?.slice(0, 7) === month),
+    sickDays: sickDayList.filter((day) => day.start_date?.slice(0, 7) === month)
+  }));
+
   return {
     reportYear,
     stats: {
@@ -277,6 +409,8 @@ export async function getHealthOverview(tenantId: string, year?: string) {
     },
     recentSymptoms,
     upcomingApptList,
-    allergies
+    allergies,
+    sickDayList,
+    careCalendar
   };
 }
